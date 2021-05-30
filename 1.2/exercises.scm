@@ -156,3 +156,59 @@
 ;;; 1.13: Proof of Binet's formula
 ;;; I did this at some point in the past:
 ;;; http://eis.lambdalambda.ninja/posts/proof-of-binets-formula
+
+;;; 1.14
+;;; The coin change problem is exponential in steps, linear in space (depth).
+;;; It is very similar to the bad fibonacci.
+
+;;; 1.15
+;;; a. p is run 5 times in (sine 12.15).
+;;; b. This is linear recursion (but not tail recursive). Thus the space will be
+;;; linear w.r.t. the number of steps. Since the angle is being /3 each
+;;; iteration, this is logarithmic in steps (and space).
+(define (cube x) (* x x x))
+(define (p x)
+  ;; (display "p was run!\n")		; cheating a little bit
+  (- (* 3 x) (* 4 (cube x))))
+(define (sine angle)
+  (if [not (> (abs angle) 0.1)]
+      angle
+      (p (sine (/ angle 3.0)))))
+
+;;; 1.16
+(define (pow-4 b n)
+  (let iter ([b b]
+	     [n n]
+	     [a 1])
+    (cond ([zero? n] a)
+	  ([even? n] (iter (square b)
+			   (/ n 2)
+			   a))
+	  (else (iter b
+		      (1- n)
+		      (* b a))))))
+
+;;; 1.17, 1.18: These should be pretty straightforward given the previous
+;;; examples.
+
+;;; 1.19: Interesting Fibonacci implementation using successive "squaring"
+(define (fib-4 n)
+  (let iter ([a 1]
+	     [b 0]
+	     [p 0]
+	     [q 1]
+	     [count n])
+    (cond ([zero? count] b)
+	  ([even? count] (iter a
+			       b
+			       ;; note the following two lines
+			       (+ (square p) (square q))
+			       (* q (+ (* 2 p) q))
+			       (/ count 2)))
+	  (else (iter (+ (* b q) (* a q) (* a p))
+		      (+ (* b p) (* a q))
+		      p
+		      q
+		      (1- count))))))
+
+(tc-iota fib-4 10)

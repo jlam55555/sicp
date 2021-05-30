@@ -34,14 +34,12 @@
 	(else (+ (fib (- n 1))
 		 (fib (- n 2))))))
 
-;;; binet's formula; write power using exp/log
-(define (pow a b)
-  (exp (* b (log a))))
+;;; binet's formula
 (define phi
   (/ (+ 1 (sqrt 5))
      2))
 (define (fib-2 n)
-  (exact (round (/ (pow phi n)
+  (exact (round (/ (expt phi n)
 		   (sqrt 5)))))
 
 ;;; iterative version; rewritten to use let. Uses the realization that the state
@@ -76,3 +74,31 @@
 			      (1- kinds-of-coins))
 		     (cc-iter (- amount (list-ref coins kinds-of-coins))
 			      kinds-of-coins)))))))
+
+;;; exponentiation
+
+;;; linear recursion for positive integer exponents
+;;; (call it pow to not overwrite buitin expt)
+;;; O(n) space and steps
+(define (pow b n)
+  (if [= n 0]
+      1
+      (* b (pow b (1- n)))))
+
+;;; linear iteration for positive integer exponents
+;;; O(n) steps, O(1) space
+(define (pow-2 b n)
+  (let iter ([counter n]
+	     [product 1])
+    (if [= counter 0]
+	product
+	(iter (1- counter)
+	      (* b product)))))
+
+;;; linear recursive method that using successive squaring
+;;; O(log n) steps and space
+(define (square x) (* x x))
+(define (pow-3 b n)
+  (cond ([zero? n] 1)
+	([even? n] (square (pow-3 b (/ n 2))))
+	(else (* b (pow-3 b (1- n))))))
