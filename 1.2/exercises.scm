@@ -259,3 +259,127 @@
 (search-for-primes 1e4 (+ 1e4 100))
 (search-for-primes 1e5 (+ 1e5 100))
 (search-for-primes 1e6 (+ 1e6 100))
+
+;;; 1.23
+;;; note: this overwrites the previous definition of smallest-divisor!
+;;; also note: we don't have to redefine prime?, it automatically uses this
+;;; definition when run
+(define (smallest-divisor n)
+  (let find-divisor ([n n]
+		     [test-divisor 2])
+    (cond ([> (square test-divisor) n] n)
+	  ([divides? test-divisor n] test-divisor)
+	  (else (find-divisor n
+			      (if [= test-divisor 2]
+				  3
+				  (+ test-divisor 2)))))))
+
+;;; tests: it does perform roughly twice as fast. Any speed decrease can be the
+;;; effect of the overhead of an additional if statement
+(search-for-primes 1e3 (+ 1e3 100))
+(search-for-primes 1e4 (+ 1e4 100))
+(search-for-primes 1e5 (+ 1e5 100))
+(search-for-primes 1e6 (+ 1e6 100))
+
+;;; 1.24
+(define (timed-prime-test n)
+  (newline)
+  (display n)
+  (let ([start (runtime)])
+    ;; run (up to) ten fermat tests per number
+    (when [fast-prime? fermat-test-random n 10]
+      (display " *** ")
+      (display (elapsed start (runtime))))))
+
+;;; tests: we would expect O(log n) performance, so 1e6 should take 3 times as
+;;; long as 1e3. It's closer to taking twice as long, but it is still clear it's
+;;; logarithmic, and will be much faster for larger primes
+(search-for-primes (exact 1e3) (+ (exact 1e3) 100))
+(search-for-primes (exact 1e4) (+ (exact 1e4) 100))
+(search-for-primes (exact 1e5) (+ (exact 1e5) 100))
+(search-for-primes (exact 1e6) (+ (exact 1e6) 100))
+
+;;; 1.25
+;;; This is mathematically equivalent (as Z_n forms a group under product), but
+;;; more inefficient: while we are performing fewer operations, our operands are
+;;; kept much smaller. Only the first two below run in reasonable time; the
+;;; latter two become much slower
+
+;; (define (expmod b n m)
+;;   (remainder (pow-4 b n) m))
+
+;; (search-for-primes (exact 1e3) (+ (exact 1e3) 100))
+;; (search-for-primes (exact 1e4) (+ (exact 1e4) 100))
+;; (search-for-primes (exact 1e5) (+ (exact 1e5) 100))
+;; (search-for-primes (exact 1e6) (+ (exact 1e6) 100))
+
+;;; 1.26
+;;; This method is now tree recursive, so the number of computations is
+;;; exponential w.r.t. its depth (rather than linear in the case of tree
+;;; recursion). The depth is logarithmic, so the method is linear w.r.t. the
+;;; input size.
+;; (define (expmod b n m)
+;;   (cond ([zero? n] 1)
+;; 	([even? n] (remainder (* (expmod b (/ n 2) m)
+;; 				 (expmod b (/ n 2) m))
+;; 			      m))
+;; 	(else (remainder (* b (expmod b (1- n) m))
+;; 			 m))))
+
+;;; 1.27
+(define (carmichael-test test n)
+  ;; checks if a number is a Carmichael number, i.e., if every integer a<n is
+  ;; a Fermat liar; returns n if Carmichael, false otherwise
+  (let iter ([a (1- n)])
+    (cond ([zero? a] n)
+	  ([test a n]
+	   (iter (1- a)))
+	  (else #f))))
+
+;;; test cases
+(map (lambda (n) (carmichael-test fermat-test n))
+     '(561 1105 1729 2465 2821 6601	; the smallest carmichael numbers
+	   51 9591 2305 67107		; some random non-carmichael composites
+	   151 173 181 18803		; some random non-carmichael primes
+	   ))
+
+;;; 1.28: Miller-Rabin primality test
+(define (expmod-mr b n m)
+  ;; calculates b^n (mod m), and signals (returns 0) if a trivial divisor of
+  ;; zero (mod m) is found
+  (cond ([zero? n] 1)
+	([even? n]
+	 (let* ([val (expmod b (/ n 2) m)]
+		[val-sq (remainder (square val) m)])
+	   ;; discovering a nontrivial sqrt of 1 (mod m)
+	   (if [and (= val-sq 1)
+		    (not (or (= val 1) (= val (1- n))))]
+	       0
+	       val)))
+	(else
+	 (remainder (* b (expmod b (1- n) m))
+		    m))))
+
+(define (mr-test a n)
+  ;; miller rabin test: a^(n-1) = 1 (mod n)
+  (= (expmod a (1- n) n) 1))
+
+(define (mr-test-random n)
+  ;; performs the miller rabin test on a random integer integer a < n
+  (mr-test (1+ (random (1- n)))
+	   n))
+
+;;; test cases: now gets the correct number of primes
+(length (filter (lambda (x) x)
+		(map (lambda (n)
+		       (if [fast-prime? mr-test-random (+ n 2) 10]
+			   (+ n 2)
+			   #f))
+		     (iota 1000))))
+
+;;; carmichael test cases
+(map (lambda (n) (carmichael-test mr-test n))
+     '(561 1105 1729 2465 2821 6601	; the smallest carmichael numbers
+	   51 9591 2305 67107		; some random non-carmichael composites
+	   151 173 181 18803		; some random non-carmichael primes
+	   ))

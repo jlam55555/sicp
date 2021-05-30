@@ -1,4 +1,7 @@
 ;;; sicp 1.2
+;;; emacs notes (a substantially shorter list than last time):
+;;; - C-s	isearch-forward
+;;; - C-r	isearch-backward
 
 ;;; linear recursion: each item has to remain on the stack until the procedure
 ;;; is completed; stack maintains state between computations; i.e., linear
@@ -126,7 +129,7 @@
 
 ;;; fermat test
 (define (expmod b n m)
-  ;; calculates b^m (mod m)
+  ;; calculates b^n (mod m)
   (cond ([zero? n] 1)
 	([even? n]
 	 (remainder (square (expmod b (/ n 2) m))
@@ -135,27 +138,31 @@
 	 (remainder (* b (expmod b (1- n) m))
 		    m))))
 
-(define (fermat-test n)
-  ;; tries the fermat test on a random integer a < n
+(define (fermat-test a n)
   ;; fermat test: a^p = a (mod p)
-  (let ([a (1+ (random (1- n)))])
-    (= (expmod a n n) a)))
+  (= (expmod a n n) a))
 
-(define (fast-prime? n times)
+(define (fermat-test-random n)
+  ;; tries the fermat test on a random integer a < n
+  (fermat-test (1+ (random (1- n)))
+	       n))
+
+(define (fast-prime? random-test n times)
   ;; performs the fermat primality test for the specified number of times
-  (cond ([zero? times])
-	([fermat-test n]
-	 (fast-prime? n (1- times)))
-	(#t #f)))
+  (let iter ([times times])
+    (cond ([zero? times])
+	  ([random-test n]
+	   (iter (1- times)))
+	  (#t #f))))
 
 ;;; perform some tests
 ;;; note that there are many Fermat pseudoprimes. 561 is a Charmichael number
 ;;; and necessarily shows up in the following list, but in my tests it was the
 ;;; only Fermat liar in the integers up to 1000
-(filter (lambda (x) x)
-	(map (lambda (n)
-	       (if [fast-prime? (+ n 2) 10]
-		   (+ n 2)
-		   #f))
-	     (iota 1000)))
+(length (filter (lambda (x) x)
+		(map (lambda (n)
+		       (if [fast-prime? fermat-test-random (+ n 2) 10]
+			   (+ n 2)
+			   #f))
+		     (iota 1000))))
 
