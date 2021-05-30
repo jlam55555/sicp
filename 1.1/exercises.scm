@@ -1,5 +1,5 @@
 ;;; this file relies on some of the code from the text
-(load "expr.scm")
+(load "1.1.scm")
 
 ;;; 1.1
 10					; 10
