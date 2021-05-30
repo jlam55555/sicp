@@ -102,3 +102,9 @@
   (cond ([zero? n] 1)
 	([even? n] (square (pow-3 b (/ n 2))))
 	(else (* b (pow-3 b (1- n))))))
+
+;;; gcd using the Euclidean algorithm
+(define (gcd a b)
+  (if [= b 0]
+      a
+      (gcd b (remainder a b))))

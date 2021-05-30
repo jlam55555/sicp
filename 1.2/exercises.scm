@@ -212,3 +212,10 @@
 		      (1- count))))))
 
 (tc-iota fib-4 10)
+
+;;; 1.20: counting remainders in the normal- and applicative-order forms of
+;;; the Euclidean algorithm
+
+;;; counting is tedious; it is evaluated once per iteration in the applicative
+;;; form, but may be evaluated multiple times per iteration in normal form. This
+;;; shows that applicative form is more efficient in this case (as usual).
