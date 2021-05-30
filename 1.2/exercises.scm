@@ -219,3 +219,43 @@
 ;;; counting is tedious; it is evaluated once per iteration in the applicative
 ;;; form, but may be evaluated multiple times per iteration in normal form. This
 ;;; shows that applicative form is more efficient in this case (as usual).
+
+;;; 1.21
+(map smallest-divisor '(199 1999 19999))
+
+;;; 1.22
+(define (runtime)
+  ;; mimicking sicp (runtime)
+  (current-time))
+
+(define (elapsed start stop)
+  ;; elapsed time helper function (similar to time, but won't automatically
+  ;; print the result
+  (let ([diff (time-difference stop start)])
+    (+ (time-second diff)
+       (/ (time-nanosecond diff) 1e9))))
+
+(define (timed-prime-test n)
+  ;; test if number is prime and print elapsed time if prime
+  (newline)
+  (display n)
+  (let ([start (runtime)])
+    (when [prime? n]
+      (display " *** ")
+      (display (elapsed start (runtime))))))
+
+(define (search-for-primes low high)
+  ;; test for primes in the odd numbers of the range [low, high]
+  ;; this doesn't check 2 nor exclude 1
+  (let iter ([n (- (1+ low) (remainder low 2))])
+    (when [<= n high]
+      (timed-prime-test n)
+      (iter (+ n 2)))))
+
+;;; test cases
+;;; sqrt(1e4) = sqrt(1e6)/10, so we expect that the runtimes are one order of
+;;; magnitude apart for these two, and they are as expected
+(search-for-primes 1e3 (+ 1e3 100))
+(search-for-primes 1e4 (+ 1e4 100))
+(search-for-primes 1e5 (+ 1e5 100))
+(search-for-primes 1e6 (+ 1e6 100))
