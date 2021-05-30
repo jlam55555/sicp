@@ -76,3 +76,53 @@
 			      (1- kinds-of-coins))
 		     (cc-iter (- amount (list-ref coins kinds-of-coins))
 			      kinds-of-coins)))))))
+
+;;; primality tests
+(define (square x) (* x x))
+(define (smallest-divisor n)
+  (find-divisor n 2))
+(define (find-divisor n test-divisor)
+  (cond ([> (square test-divisor) n] n)
+	([divides? test-divisor n] test-divisor)
+	(else (find-divisor n (1+ test-divisor)))))
+(define (divides? a b)
+  (zero? (remainder b a)))
+
+;;; simplest (and certain) primality test
+(define (prime? n)
+  (= n (smallest-divisor n)))
+
+;;; fermat test
+(define (expmod b n m)
+  ;; calculates b^m (mod m)
+  (cond ([zero? n] 1)
+	([even? n]
+	 (remainder (square (expmod b (/ n 2) m))
+		    m))
+	(else
+	 (remainder (* b (expmod b (1- n) m))
+		    m))))
+
+(define (fermat-test n)
+  ;; tries the fermat test on a random integer a < n
+  ;; fermat test: a^p = a (mod p)
+  (let ([a (1+ (random (1- n)))])
+    (= (expmod a n n) a)))
+
+(define (fast-prime? n times)
+  ;; performs the fermat primality test for the specified number of times
+  (cond ([zero? times])
+	([fermat-test n]
+	 (fast-prime? n (1- times)))
+	(#t #f)))
+
+;;; perform some tests
+;;; note that there are many Fermat pseudoprimes. 561 is a Charmichael number
+;;; and necessarily shows up in the following list, but in my tests it was the
+;;; only Fermat liar in the integers up to 1000
+(filter (lambda (x) x)
+	(map (lambda (n)
+	       (if [fast-prime? (+ n 2) 10]
+		   (+ n 2)
+		   #f))
+	     (iota 1000)))
