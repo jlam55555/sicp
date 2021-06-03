@@ -2,6 +2,7 @@
 ;;; Part of the reason I am writing these out is to become more comfortable with
 ;;; writing Lisp; the rest of the reason is to become more comfortable with
 ;;; Emacs and Colemak
+(load "../utils/utils.scm")
 
 ;;; 1.3.1: procedures as arguments
 (define (sum-integers a b)

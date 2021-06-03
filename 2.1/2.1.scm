@@ -62,3 +62,39 @@
   ;; TODO: create a util library with gcd
   (let ([d (gcd x y)])
     (cons (/ x d) (/ y d))))
+
+;;; 2.1.3: What is meant by data?
+(define (my-cons x y)
+  ;; the most important part about an abstract data structure is that it meets
+  ;; the conditions that define it, like a mathematical definition; its specific
+  ;; implementation usually doesn't matter. See this implementation of cons/car/
+  ;; cdr using only procedures and closures (a "procedural implementation" (?)
+  ;; of a data structure) -- this cannot be distuinguished from the ordinary
+  ;; implementation because its api is the same
+  (lambda (i)
+    (cond ([= i 0] x)
+	  ([= i 1] y)
+	  (#t (error 'my-cons "argument not 0 or 1")))))
+(define (my-car c) (c 0))
+(define (my-cdr c) (c 1))
+
+;;; 2.1.4: Extended Exercise: Interval Arithmetic
+(define (add-interval x y)
+  ;; add two intervals
+  (make-interval (+ (lower-bound x) (lower-bound y))
+		 (+ (upper-bound x) (upper-bound y))))
+
+(define (mul-interval x y)
+  ;; multiply two intervals
+  (let ([p1 (* (lower-bound x) (lower-bound y))]
+	[p2 (* (lower-bound x) (upper-bound y))]
+	[p3 (* (upper-bound x) (lower-bound y))]
+	[p4 (* (upper-bound x) (upper-bound y))])
+    (make-interval (min p1 p2 p3 p4)
+		   (max p1 p2 p3 p4))))
+
+(define (div-interval x y)
+  ;; divide an interval by another (multiply by the reciprocal)
+  (mul-interval x
+		(make-interval (/ 1.0 (upper-bound y))
+			       (/ 1.0 (lower-bound y)))))

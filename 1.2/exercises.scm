@@ -1,6 +1,6 @@
 ;;; exercises from sicp 1.2
 ;;; as with 1.1, this may depend on some code from 1.2.scm (e.g., testcase code)
-(load "1.2.scm")
+(load "../1.2/1.2.scm")
 
 ;;; 1.9
 
@@ -349,15 +349,15 @@
   ;; zero (mod m) is found
   (cond ([zero? n] 1)
 	([even? n]
-	 (let* ([val (expmod b (/ n 2) m)]
+	 (let* ([val (expmod-mr b (/ n 2) m)]
 		[val-sq (remainder (square val) m)])
 	   ;; discovering a nontrivial sqrt of 1 (mod m)
 	   (if [and (= val-sq 1)
-		    (not (or (= val 1) (= val (1- n))))]
+		    (not (or (= val 1) (= val (1- m))))]
 	       0
-	       val)))
+	       val-sq)))
 	(else
-	 (remainder (* b (expmod b (1- n) m))
+	 (remainder (* b (expmod-mr b (1- n) m))
 		    m))))
 
 (define (mr-test a n)
