@@ -53,3 +53,12 @@
 ;; (define make-rat cons)
 ;; (define numer car)
 ;; (define denom cdr)
+
+(define (print-rat x)
+  (format #t "~a/~a\n" (numer x) (denom x)))
+
+(define (make-rat x y)
+  ;; a better make-rat
+  ;; TODO: create a util library with gcd
+  (let ([d (gcd x y)])
+    (cons (/ x d) (/ y d))))
