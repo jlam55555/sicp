@@ -269,11 +269,13 @@
 ;;; 1.43: repeated autocomposition
 (define (repeated f n)
   ;; generalized version of double: returns the function obtained by composing
-  ;; f with itself n times. Assumes n >= 1
-  (let iter ([n n])
-    (if [= n 1]
-	f
-	(compose f (iter (1- n))))))
+  ;; f with itself n times. Assumes n >= 0
+  (if [zero? n]
+      identity
+      (let iter ([n n])
+	(if [= n 1]
+	    f
+	    (compose f (iter (1- n)))))))
 
 (define (double f)
   ;; an alternative way to define double using the generalized version
@@ -294,9 +296,51 @@
   ((repeated (lambda (f) (smooth f dx)) n) f))
 
 ;;; 1.45: repeated average damping
+(define (log2 n)
+  ;; helper function to calculate log base 2
+  (/ (log n) (log 2)))
 
-;;; TODO
+(define (nth-root x n)
+  ;; method for finding the n-th root using repeated average damping so that
+  ;; the iterative improvement converges. For the nth root to converge, need
+  ;; floor(log2(n)) repeated dampings
+  (fp ((repeated average-damp (flonum->fixnum (log2 n)))
+       (lambda (y) (/ x (expt y (1- n)))))
+      1.0))
+
+;;; By empirical observations:
+;;; n=1 => r=0 (r = number of dampings required for convergence)
+;;; n=2-3 => r=1
+;;; n=4-7 => r=2
+;;; n=8-15 => r=3
+;;; n=16-31 => r=4
+;;; ...
 
 ;;; 1.46: a general framework for iterative improvement
+(define (iterative-improve ok? improve)
+  ;; a general framework for implementing iterative improvement by taking
+  ;; in a function that can check if a guess is good enough and another
+  ;; function to improve the guess
+  (lambda (guess)
+    (let iter ([guess guess])
+      (let ([next (improve guess)])
+	(if [ok? guess next]
+	    next
+	    (iter next))))))
 
-;;; TODO
+;;; rewriting fp and sqrt in terms of this general framework
+(define (close-enough? a b)
+  ;; helper function for the below two
+  (< (abs (- a b)) tolerance))
+
+(define (fp f guess)
+  ;; fp written in terms of iterative-improve
+  ((iterative-improve close-enough? f)
+   guess))
+
+(define (sqrt x)
+  ;; sqrt written in terms of iterative-improve; based on the initial version
+  ;; from 1.1
+  ((iterative-improve close-enough?
+		      (average-damp (lambda (y) (/ x y))))
+   1.0))
