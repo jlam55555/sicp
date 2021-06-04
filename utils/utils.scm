@@ -15,6 +15,10 @@
 ;;;   - smallest-divisor
 ;;;   - prime? (deterministic trial division, O(sqrt(n)), fast for small nums)
 ;;;   - mr-prime? (fast probabalistic test using Miller-Rabin test, O(log^2 n))
+;;; - function composition:
+;;;   - double
+;;;   - compose
+;;;   - autocompose (was called "repeated" in the exercise)
 ;;; 
 ;;; other possible functions to include here, will include if they get reused:
 ;;; - factorial (1.2)
@@ -122,3 +126,23 @@
 	      ([random-test n]
 	       (iter (1- times)))
 	      (#t #f)))))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; function composition
+
+(define (double f)
+  (lambda (x)
+    (f (f x))))
+
+(define (compose f g)
+  ;; returns the composition (f o g). Assumes f, g take one argument
+  (lambda (x) (f (g x))))
+
+(define (autocompose f n)
+  ;; generalized version of double: returns the function obtained by composing
+  ;; f with itself n times. Assumes n >= 0
+  (if [zero? n]
+      identity
+      (let iter ([n n])
+	(if [= n 1]
+	    f
+	    (compose f (iter (1- n)))))))
