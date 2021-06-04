@@ -146,3 +146,8 @@
 ;;; (f f)
 ;;; (f 2)
 ;;; (2 2) => cannot apply non-procedure 2
+
+;;; 1.35
+;;; phi^2 = phi + 1
+(fp (lambda (x) (1+ (/ 1.0 x))) 1.0)	; using fp
+(/ (1+ (sqrt 5)) 2)			; true value

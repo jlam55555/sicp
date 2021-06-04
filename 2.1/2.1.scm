@@ -4,6 +4,7 @@
 ;;; from simpler data structures. Procedures should operate on *abstract* data
 ;;; structures, as opposed to *concrete* data structures. The interface between
 ;;; abstract and concrete data structures are constructors and selectors.
+(load "../utils/utils.scm")
 
 ;;; 2.1.1: Rational numbers
 ;;; From algebra, x and y should be from some integral domain R, which defines
@@ -59,7 +60,6 @@
 
 (define (make-rat x y)
   ;; a better make-rat
-  ;; TODO: create a util library with gcd
   (let ([d (gcd x y)])
     (cons (/ x d) (/ y d))))
 
