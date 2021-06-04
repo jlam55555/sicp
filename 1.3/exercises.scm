@@ -146,3 +146,157 @@
 ;;; (f f)
 ;;; (f 2)
 ;;; (2 2) => cannot apply non-procedure 2
+
+;;; 1.35
+;;; phi^2 = phi + 1 => divide both sides by phi
+;;; x_{n+1} = 1 + 1/x_n
+(fp (lambda (x) (1+ (/ 1.0 x))) 1.0)
+
+;;; 1.36
+(define (fp f guess)
+  ;; altered to print out the values
+  
+  (define (close-enough? a b)
+    ;; helper function
+    (< (abs (- a b)) tolerance))
+
+  (let iter ([g guess])
+    (display g)
+    (newline)
+    (let ([next (f g)])
+      (if [close-enough? g next]
+	  next
+	  (iter next)))))
+
+;;; x^x = 1000
+;;; x*log(x) = log(1000)
+;;; x = log(1000)/log(x)
+(define (fp-x^x x)
+  (/ (log 1000) (log x)))
+(fp fp-x^x 2.0)
+(fp (average-damp fp-x^x) 2.0)
+
+;;; 1.37: infinite continued fractions (!!!)
+(define (cont-frac n d k)
+  ;; recursively calculates the continued fraction in the form
+  ;; n[1]/(d[1]+n[2]/(d[2]+n[3]/(d[3]+ ... +n[k]/d[k])))
+  ;; where n and d are functions that generate sequences
+  (let iter ([i 1])
+    (if [> i k]
+	0
+	(/ (n i) (+ (d i) (iter (1+ i)))))))
+
+(define (cont-frac n d k)
+  ;; iteratively calculates the continued fraction in the form
+  ;; n[1]/(d[1]+n[2]/(d[2]+n[3]/(d[3]+ ... +n[k]/d[k])))
+  ;; where n and d are functions that generate sequences;
+  ;; this iterative version necessarily calculates the fraction
+  ;; from inside to out
+  (let iter ([i k]
+	     [result 0])
+    (if [zero? i]
+	result
+	(iter (1- i)
+	      (/ (n i) (+ (d i) result))))))
+
+(define (one x) 1.0)
+(/ 1.0 (cont-frac one one 10))
+(/ 1.0 (cont-frac one one 100))
+(/ 1.0 (cont-frac one one 1000))
+
+;;; 1.38: a continued fraction approximation for e
+(define (e-denom i)
+  ;; generates the denominator sequence in the continued fraction appoximation
+  ;; for e published by Euler in De Fractionibus Continuis
+  (if [= (mod i 3) 2]
+      (+ 2 (* 2 (fx/ i 3)))
+      1))
+
+(+ 2 (cont-frac one e-denom 10))
+
+;;; 1.39: a continued fraction appoximation for tan
+(define (tan-cf x)
+  ;; Lambert's approximation for the tangent function
+  ;; use fixed number of iterations for simplicity
+  (inexact (cont-frac (lambda (i) (if [= i 1] x (- (square x))))
+		      (lambda (i) (1- (* 2 i)))
+		      10)))
+
+;;; 1.40: cubic function generator
+(define (cubic a b c)
+  (lambda (x)
+    (+ (cube x)
+       (* a (square x))
+       (* b x)
+       c)))
+
+;;; x^3+27 = (x+3)(x^2+3x+3)
+;;; should have a zero around -3
+(newtons-method (cubic 0 0 27) -1)
+
+;;; 1.41: doubling (procedures)
+(define (double f)
+  ;; applies f twice to its argument. (f should take and return one argument
+  ;; of the same type)
+  (lambda (x) (f (f x))))
+
+;;; the following returns 21
+;;; double => runs function twice
+;;; (double double) => runs double runs on itself, runs four times (quadruple)
+;;; (double (double double)) => runs quadruple on itself, runs 16 times
+(((double (double double)) 1+) 5)
+
+;;; or, more explicitly:
+;;; f: x -> (f x)
+;;; double: f -> (x -> (f (f x)))
+;;; (double f) = x -> (f (f x))
+;;; db2 = (double double) = f -> (double (double f))
+;;; db3 = (double db2)) = f -> (db2 (db2 f))
+;;;                     = (double (double (double (double f))))
+;;; (db3 1+) = x -> (double (double (double (1+ (1+ x)))))
+;;;          = x -> (double (double (1+ (1+ (1+ (1+ x))))))
+;;;          = x -> (double (1+ (1+ (1+ (1+ (1+ (1+ (1+ (1+ x)))))))))
+;;;          = x -> 16 times add 1
+
+;;; 1.42: function composition
+(define (compose f g)
+  ;; returns the composition (f o g). Assumes f, g take one argument
+  (lambda (x) (f (g x))))
+
+;;; (6+1)^2
+((compose square 1+) 6)
+
+;;; 1.43: repeated autocomposition
+(define (repeated f n)
+  ;; generalized version of double: returns the function obtained by composing
+  ;; f with itself n times. Assumes n >= 1
+  (let iter ([n n])
+    (if [= n 1]
+	f
+	(compose f (iter (1- n))))))
+
+(define (double f)
+  ;; an alternative way to define double using the generalized version
+  (repeated f 2))
+
+(((double (double (double double))) 1+) 5)
+
+;;; 1.44: smoothing
+(define (smooth f dx)
+  ;; returns a smoothed version of f
+  (lambda (x)
+    (/ (+ (f (- x dx))
+	  (f x)
+	  (f (+ x dx))) 3)))
+
+(define (n-smooth f dx n)
+  ;; returns a n-fold smoothed version of f
+  ((repeated (lambda (f) (smooth f dx)) n) f))
+
+;;; 1.45: repeated average damping
+
+;;; TODO
+
+;;; 1.46: a general framework for iterative improvement
+
+;;; TODO

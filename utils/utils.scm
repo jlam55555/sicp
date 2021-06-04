@@ -8,6 +8,7 @@
 ;;;   - identity
 ;;;   - square
 ;;;   - cube
+;;;   - average
 ;;; - primality tests:
 ;;;   - divides?
 ;;;   - coprime?
@@ -22,7 +23,7 @@
 ;;; - (regular) expmod, fermat-prime? (1.2)
 ;;; - timing function (1.2 exercises)
 ;;; - fixed-point method (1.3)
-;;; - newton's method (1.3)
+;;; - integration, derivative, newton's method (1.3)
 ;;; - filtered-accumulate (1.3 -- waiting for a list version)
 ;;; - esieve (favorite algo)
 ;;;
@@ -50,6 +51,10 @@
 (define (cube x)
   ;; cube a number
   (* x x x))
+
+(define (average a b)
+  ;; mean of two numbers
+  (/ (+ a b) 2))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; primality tests
