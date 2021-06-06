@@ -183,8 +183,131 @@
 (define (fx->church n)
   ;; generate an arbitrary church numeral from a regular nonnegative number
   (lambda (f)
-    (autocompose f n)))
+    (n-fold-compose f n)))
 
 (define (church->fx n)
   ;; converts a church numeral into a number equivalent
   ((n 1+) 0))
+
+;;; 2.7: continuing the interval example
+(define (interval-make lower upper)
+  ;; construct an interval object
+  (cons lower upper))
+
+(define (interval-upper-bound i)
+  ;; get the upper bound of an interval
+  (cdr i))
+
+(define (interval-lower-bound i)
+  ;; get the lower bound of an interval
+  (car i))
+
+;;; 2.8: interval difference
+(define (interval-sub a b)
+  ;; return the difference between two intervals
+  ((interval-make (- (interval-lower-bound a) (interval-upper-bound b))
+		  (- (interval-upper-bound a) (interval-lower-bound b)))))
+
+;;; 2.9: interval widths
+;;; let interval1 be (l1, u1), interval2 be (l2, u2)
+;;; +: w = ((u1+u2) - (l1+l2))/2 = (u1-l1)/2 + (u2-l2)/2 = w1 + w2
+;;; -: w = ((u1-l2) - (l1-u2))/2 = (u1-l1)/2 + (l2-l2)/2 = w1 + w2
+;;; *: [0,1] * [0,1] = [0,1] but [1,2] * [1,2] = [1,4]
+;;;    input widths are the same, output widths are not
+;;; /: [0,1] / [1,2] = [0,1] * [1,1/2] = [0,1]
+;;;    [0,1] / [2,3] = [0,1] * [1/2,1/3] = [0,1/2]
+;;;    input widths are the same, output widths are not
+
+;;; 2.10: prevent divide by zero (interval)
+(define (interval-div x y)
+  ;; divide an interval by another (multiply by the reciprocal)
+  ;; prevent divide by interval that spans zero (including endpoints)
+  (if [and (<= (interval-lower-bound y) 0)
+	   (>= (interval-upper-bound y) 0)]
+      (errorf 'interval-div "interval [~a,~a] spans 0"
+	      (interval-lower-bound a) (interval-upper-bound b))
+      (interval-mul x
+		    (make-interval (/ 1.0 (interval-upper-bound y))
+				   (/ 1.0 (interval-lower-bound y))))))
+
+;;; 2.11: ben's suggestion
+(define (interval-mul x y)
+  ;; break up multiplication into nine cases, only one of which requires
+  ;; more than two multiplications
+
+  ;; store endpoints because fncalls are long
+  (let ([u1 (interval-upper-bound x)]
+	[l1 (interval-lower-bound x)]
+	[u2 (interval-upper-bound y)]
+	[l2 (interval-lower-bound y)])
+    ;; get signs of endpoints
+    (let ([su1 (>= u1 0)]
+	  [sl1 (>= l1 0)]
+	  [su2 (>= u2 0)]
+	  [sl2 (>= l2 0)])
+      (cond
+       ;; all positive or negative
+       ([and sl1 su1 sl2 su2]
+	(interval-make (* l1 l2) (* u1 u2)))
+       ([and (not sl1) (not su1) (not sl2) (not su2)]
+	(interval-make (* u1 u2) (* l1 l2)))
+       ;; one positive, one negative
+       ([and sl1 su1 (not sl2) (not su2)]
+	(interval-make (* u1 l2) (* l1 u2)))
+       ([and (not sl1) (not su1) sl2 su2]
+	(interval-make (* l1 u2) (* u1 l2)))
+       ;; one spanning zero
+       ([and sl1 su1 (not sl2) su2]
+	(interval-make (* u1 l2) (* u1 u2)))
+       ([and (not sl1) (not su1) (not sl2) su2]
+	(interval-make (* l1 u2) (* l1 l2)))
+       ([and (not sl1) su1 sl2 su2]
+	(interval-make (* l1 u2) (* u1 u2)))
+       ([and (not sl1) su1 (not sl2) (not su2)]
+	(interval-make (* u1 l2) (* l1 l2)))
+       ;; both spanning zero
+       (#t (let ([p1 (* u1 u2)]
+		 [p2 (* u1 l2)]
+		 [p3 (* l1 u2)]
+		 [p4 (* l1 l2)])
+	     (interval-make (min p1 p2 p3 p4)
+			    (max p1 p2 p3 p4))))))))
+
+;;; 2.12: different constructors
+(define (interval-make-center-width c w)
+  ;; constructs an interval given center and width
+  (interval-make (- c w) (+ c w)))
+
+(define (interval-center i)
+  ;; the center of an interval
+  (average (interval-lower-bound i) (interval-upper-bound i)))
+
+(define (interval-width i)
+  ;; the width of an interval
+  (/ (- (interval-upper-bound i) (interval-lower-bound i))
+     2))
+
+(define (interval-make-center-tolerance c p)
+  ;; constructs an interval given center and percentage tolerance
+  (interval-make-center-width c (abs (* c p))))
+
+(define (interval-tolerance i)
+  ;; the percent tolerance of an interval around its center
+  (abs (/ (interval-width i) (interval-center i))))
+
+;;; 2.13: interval width as a function of percent
+;;; (see assumptions below)
+;;; We basically make a linearizing assumption because tolerances are small
+;;; (A +- a) * (B +- b) ~= AB +- ab (not actually true, but we can estimate
+;;; that the center is ~= AB)
+;;; 
+;;; Really the product is [(A-a)(B-b),(A+a)(B+b)] = [AB-Ab-Ba+ab,AB+Ab+Ba+ab]
+;;; so width = ((AB+Ab+Ba+ab)-(AB-Ab-Ba+ab))/2 = 2*(Ab+Ba)/2 = Ab+Ba
+;;; Let a=p1*A, b=p2*B, then w=AB*p2 + AB*p1 = AB*(p1+p2)
+;;; Thus output percentage is p=w/c = AB*(p1+p2)/AB = p1+p2
+
+(define (interval-estimate-prod-tolerance x y)
+  ;; estimates the width of the product of x and y
+  ;; for simplicity, assume x,y are both positive
+  ;; and the percent tolerances are small
+  (+ (interval-tolerance x) (interval-tolerance y)))

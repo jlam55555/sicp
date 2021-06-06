@@ -79,22 +79,22 @@
 (define (my-cdr c) (c 1))
 
 ;;; 2.1.4: Extended Exercise: Interval Arithmetic
-(define (add-interval x y)
+(define (interval-add x y)
   ;; add two intervals
-  (make-interval (+ (lower-bound x) (lower-bound y))
-		 (+ (upper-bound x) (upper-bound y))))
+  (interval-make (+ (interval-lower-bound x) (interval-lower-bound y))
+		 (+ (interval-upper-bound x) (interval-upper-bound y))))
 
-(define (mul-interval x y)
+(define (interval-mul x y)
   ;; multiply two intervals
-  (let ([p1 (* (lower-bound x) (lower-bound y))]
-	[p2 (* (lower-bound x) (upper-bound y))]
-	[p3 (* (upper-bound x) (lower-bound y))]
-	[p4 (* (upper-bound x) (upper-bound y))])
-    (make-interval (min p1 p2 p3 p4)
+  (let ([p1 (* (interval-lower-bound x) (interval-lower-bound y))]
+	[p2 (* (interval-lower-bound x) (interval-upper-bound y))]
+	[p3 (* (interval-upper-bound x) (interval-lower-bound y))]
+	[p4 (* (interval-upper-bound x) (interval-upper-bound y))])
+    (interval-make (min p1 p2 p3 p4)
 		   (max p1 p2 p3 p4))))
 
-(define (div-interval x y)
+(define (interval-div x y)
   ;; divide an interval by another (multiply by the reciprocal)
-  (mul-interval x
-		(make-interval (/ 1.0 (upper-bound y))
-			       (/ 1.0 (lower-bound y)))))
+  (interval-mul x
+		(make-interval (/ 1.0 (interval-upper-bound y))
+			       (/ 1.0 (interval-lower-bound y)))))

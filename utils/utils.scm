@@ -130,6 +130,7 @@
 ;;; function composition
 
 (define (double f)
+  ;; composes a function with itself
   (lambda (x)
     (f (f x))))
 
@@ -137,7 +138,7 @@
   ;; returns the composition (f o g). Assumes f, g take one argument
   (lambda (x) (f (g x))))
 
-(define (autocompose f n)
+(define (n-fold-compose f n)
   ;; generalized version of double: returns the function obtained by composing
   ;; f with itself n times. Assumes n >= 0
   (if [zero? n]
