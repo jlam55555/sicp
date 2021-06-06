@@ -57,23 +57,54 @@
 			  (point-make 2 -3)))
 (point-print (segment-midpoint seg))
 
-;;; 2.3: reprentation for rectangles
-(define (rectangle-make p1 p2 p3)
-  ;; define a rectangle in terms of three corner points
+;;; 2.3: representation for rectangles
+;;; Greatly simplify the problem by assuming that the rectangle is
+;;; orthogonal to the Cartesian axes
+
+(define (rectangle-make top-left bottom-right)
+  ;; define a rectangle in terms of its top-left and bottom-right points
   ;; assumes that the three points are not collinear
-  (error 'rectangle-make "not implemented yet"))
+  (cons top-left bottom-right))
+
+(define (rectangle-top-left r)
+  ;; gets the top-left point of a rectangle
+  (car r))
+
+(define (rectangle-bottom-right r)
+  ;; gets the bottom-right point of a rectangle
+  (cdr r))
 
 (define (rectangle-area r)
   ;; calculates the area of the rectangle r
-  (error 'rectangle-area "not implemented yet"))
+  (let ([tl (rectangle-top-left r)]
+	[br (rectangle-bottom-right r)])
+    (* (- (point-x br) (point-x tl))
+       (- (point-y br) (point-y tl)))))
 
 (define (rectangle-perimeter r)
   ;; calculates the perimeter of the rectangle r
-  (error 'rectangle-perimeter "not implemented yet"))
+  (let ([tl (rectangle-top-left r)]
+	[br (rectangle-bottom-right r)])
+    (* (+ (- (point-x br) (point-x tl))
+	  (- (point-y br) (point-y tl)))
+       2)))
 
-;;; TODO: a second internal representation for rectangles with
-;;; suitable abstraction barriers such that the same area
-;;; and perimeter functions work?
+;;; a second internal representation for rectangles such that
+;;; rectangle-area and rectangle-perimeter still work
+(define (rectangle-make top-left width height)
+  ;; constructs a rectangle with a different concrete implementation
+  (cons top-left (cons width height)))
+
+(define (rectangle-top-left r)
+  ;; gets the top-left point of a rectangle defined with the
+  ;; second rectangle constructor
+  (car r))
+
+(define (rectangle-bottom-right r)
+  ;; gets the bottom-right point of a rectangle defined with the
+  ;; second rectangle constructor
+  (point-make (+ (point-x (car r)) (cadr r))
+	      (+ (point-y (car r)) (cddr r))))
 
 ;;; 2.4: another procedural implementation of cons
 (define (my-cons-2 x y)
@@ -311,3 +342,78 @@
   ;; for simplicity, assume x,y are both positive
   ;; and the percent tolerances are small
   (+ (interval-tolerance x) (interval-tolerance y)))
+
+;;; 2.14: Lem's complaints
+(define (par1 r1 r2)
+  ;; parallel resistor calculation using r1*r2/(r1+r2)
+  (interval-div (interval-mul r1 r2)
+		(interval-add r1 r2)))
+
+(define (par2 r1 r2)
+  ;; parallel resistor calculation using 1/(1/r1+1/r2)
+  (let ([one (interval-make 1 1)])
+    (interval-div one
+		  (interval-add (interval-div one r1)
+				(interval-div one r2)))))
+;;; helper functions
+(define (interval-print i)
+  ;; prints the interval to a string
+  (format #f "[~a,~a]"
+	  (interval-upper-bound i)
+	  (interval-lower-bound i)))
+
+(define (interval-print-center-width i)
+  ;; prints the interval in center-width form to a string
+  (format #f "[~a +- ~a]"
+	  (interval-center i)
+	  (interval-width i)))
+
+(define (interval-print-center-tolerance i)
+  ;; prints the interval in center-tolerance form to a string
+  (format #f "[~a +- ~a%]"
+	  (interval-center i)
+	  (* (interval-tolerance i) 100)))
+
+;;; sample tests: lem's example
+(define r1 (interval-make-center-tolerance 560 .05))
+(define r2 (interval-make-center-tolerance 330 .05))
+(interval-print-center-tolerance (par1 r1 r2))
+(interval-print-center-tolerance (par2 r1 r2))
+
+;;; sample tests: A/A and A/B
+;;; as expected, dividing/multiplying roughly sums the tolerances
+(interval-print-center-tolerance (interval-div r1 r1))
+(interval-print-center-tolerance (interval-div r2 r2))
+(interval-print-center-tolerance (interval-div r1 r2))
+(interval-print-center-tolerance (interval-div r2 r1))
+
+;;; 2.15: eva's explanation 
+
+;;; I think she is right. When we simplify the formulas and say they are
+;;; algebraically equivalent, we are performing symbolic (exact) manipulations.
+;;; 
+;;; The problem is that if we have an expression with an inexact value
+;;; multiple times, its uncertainty gets factored in multiple times, when
+;;; it should only be counted once.
+;;;
+;;; In other words, it's about the interpretation of an interval. We're not
+;;; *really* operating on the intervals themselves; we're acting on a specific
+;;; value that may lie in that interval. If r1 (from the above tests) is 554
+;;; Ohms, then it is 554 Ohms wherever r1 shows in the equation. Similarly,
+;;; if I is an interval, I/I should be exactly 1 (the range [1,1]) in this
+;;; interpretation: for any value i in I, i/i = 1.
+;;;
+;;; In other other words, we can't treat intervals like we would with regular
+;;; deterministic values, because what we are really operating on are the
+;;; results for all the possible values that lie within that interval.
+
+;;; 2.16: a solution for this phenomenon
+
+;;; According to some online sources, performing interval arithmetic with the
+;;; correct bookkeeping (i.e., only counting uncertainties once) is a hard
+;;; but solvable problem. See
+;;; https://en.wikipedia.org/wiki/Interval_arithmetic#Dependency_problem
+;;; for a discussion of this problem. These answers on Stack Overflow
+;;; (https://stackoverflow.com/a/14131196/2397327,
+;;;  https://stackoverflow.com/a/67394859/2397327) help to give a good idea
+;;; of the problem.

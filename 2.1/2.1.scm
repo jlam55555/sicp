@@ -96,5 +96,5 @@
 (define (interval-div x y)
   ;; divide an interval by another (multiply by the reciprocal)
   (interval-mul x
-		(make-interval (/ 1.0 (interval-upper-bound y))
+		(interval-make (/ 1.0 (interval-upper-bound y))
 			       (/ 1.0 (interval-lower-bound y)))))
