@@ -258,7 +258,7 @@
       (errorf 'interval-div "interval [~a,~a] spans 0"
 	      (interval-lower-bound a) (interval-upper-bound b))
       (interval-mul x
-		    (make-interval (/ 1.0 (interval-upper-bound y))
+		    (interval-make (/ 1.0 (interval-upper-bound y))
 				   (/ 1.0 (interval-lower-bound y))))))
 
 ;;; 2.11: ben's suggestion
