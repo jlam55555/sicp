@@ -40,7 +40,7 @@
   (if [null? items]
       '()
       (cons (proc (car items))
-	    (map proc (cdr items)))))
+	    (my-map proc (cdr items)))))
 
 (my-map 1+ '(2 3 4))
 
