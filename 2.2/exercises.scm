@@ -446,3 +446,121 @@
 ;;; 4 + '() -> (4)
 ;;; 3 + (4) -> (3 4)
 ;;; ...
+
+;;; 2.40
+;;; this is very similar to the example given in the section and
+;;; cartesian-product in the notes, but we simplify it by writing it in
+;;; terms of flatmap
+(define (unique-pairs n)
+  ;; generate a list of pairs (i,j), for 1 <= j < i <= n
+  ;; expect n*(n+1)/2 pairs
+  (flatmap (lambda (n)
+	     (my-map (lambda (m) (list n m))
+		     (enumerate-interval 1 (1- n))))
+	   (enumerate-interval 2 n)))
+
+(unique-pairs 4)
+
+;;; use unique-pairs to implement prime-sum-pairs
+(define (prime-sum-pairs n)
+  ;; generate all tuples (i,j,i+j) where 1 <= j < i < n, i+j is prime
+  
+  (define (prime-sum? pair)
+    (prime? (+ (car pair) (cadr pair))))
+
+  (define (make-pair-sum pair)
+    (list (car pair) (cadr pair) (+ (car pair) (cadr pair))))
+
+  (my-map make-pair-sum
+	  (filter prime-sum? (unique-pairs n))))
+
+(prime-sum-pairs 6)
+
+;;; 2.41
+(define (unique-triples n)
+  ;; analogous to unique-pairs
+  (flatmap (lambda (n)
+	     (my-map (lambda (m) (cons n m))
+		     (unique-pairs (1- n))))
+	   (enumerate-interval 3 n)))
+
+(unique-triples 5)
+
+(define (prime-sum-triples n)
+  ;; generate all tuples (i,j,k,i+j+k) where 1 <= k < j < i < n, i+j is prime
+  
+  (define (prime-sum? triple)
+    (prime? (+ (car triple) (cadr triple) (caddr triple))))
+
+  (define (make-triple-sum triple)
+    (list (car triple)
+	  (cadr triple)
+	  (caddr triple)
+	  (+ (car triple)
+	     (cadr triple)
+	     (caddr triple))))
+
+  (my-map make-triple-sum
+	  (filter prime-sum? (unique-triples n))))
+
+(prime-sum-triples 6)
+
+;;; 2.42: n-queens (!!!)
+(define (queens board-size)
+  ;; find all solution to the n-queens problem, where n=board-size
+  ;; some of the procedure signatures have been simplified by removing the
+  ;; column as a parameter, because this isn't necessary if built in reverse
+
+  (define (adjoin-position new-row prev-queen-seq)
+    ;; creates a new board with the queen added in the new position
+    ;; can be simplified to (define adjoin-position cons)
+    (cons new-row prev-queen-seq))
+
+  (define empty-board
+    ;; representation of an empty board; simply represented as a sequence of
+    ;; the rows of queens in consecutive columns
+    '())
+
+  (define (safe? queen-seq)
+    ;; determines if a board is safe. Only checks the newly added queen in col k
+    
+    (define (pair-safe? col-diff row-diff)
+      ;; determines if a pair of queens is safe given the absolute difference
+      ;; between their rows and columns (note in this setup, two queens cannot
+      ;; be in the same column)
+      (not (or (zero? row-diff)
+	       (= col-diff row-diff))))
+    
+    (let ([row (car queen-seq)])
+      (let iter ([col-diff 1]
+		 [rest (cdr queen-seq)])
+	(cond ([null? rest] #t)
+	      ([pair-safe? col-diff (abs (- (car rest) row))]
+	       (iter (1+ col-diff) (cdr rest)))
+	      (#t #f)))))
+  
+  (let queen-cols ([k board-size])
+    (if [zero? k]
+	(list empty-board)
+	(my-filter
+	 (lambda (positions) (safe? positions))
+	 (flatmap
+	  (lambda (rest-of-queens)
+	    (my-map (lambda (new-row)
+		      (adjoin-position new-row rest-of-queens))
+		    (enumerate-interval 1 board-size)))
+	  (queen-cols (1- k)))))))
+
+(length (queens 8))			; gets the correct solution
+
+;;; 2.43
+;;; the following is inefficient because it recalculates (queen-cols n)
+;;; (an exponential procedure) many times for most values of 1 < n < board-size,
+;;; while the above version only calculates it once per board size
+;;; 
+;; (flatmap
+;;  (lambda (new-row)
+;;    (map (lambda (rest-of-queens)
+;; 	  (adjoin-position new-row k rest-of-queens))
+;; 	(queen-cols (1- k))
+;;  (enumerate-interval 1 board-size))))
