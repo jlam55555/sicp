@@ -80,7 +80,7 @@
 (my-filter odd? (list 1 2 3 4 5))
 
 (define (accumulate op initial items)
-  ;; accumulates a value over a list; same as stdlib fold-left
+  ;; accumulates a value over a list; same as stdlib fold-right
   (if [null? items]
       initial
       (op (car items)

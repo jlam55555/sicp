@@ -300,3 +300,149 @@
 ;;; contain its first element s1 and all subsets of S that don't contain s1,
 ;;; i.e., the power set of (S \ {s1}) (= rest), which we calculate recurively.
 ;;; To find the former set, we take rest and add s1 to each element of rest.
+
+;;; 2.33: reexpressing list ops as special cases of accumulations
+(define (my-map-2 proc lst)
+  ;; another implementation of map using accumulate
+  (accumulate (lambda (x y) (cons (proc x) y))
+	      '()
+	      lst))
+
+(define (my-append-2 lst1 lst2)
+  ;; another implementation of append using accumulate
+  ;; note the order of the arguments
+  (accumulate cons lst2 lst1))
+
+(define (my-length-2 lst)
+  ;; another implementation of length using accumulate
+  (accumulate (lambda (_ a) (1+ a))
+	      0
+	      lst))
+
+(my-map-2 1+ (iota 5))
+(my-append-2 (iota 5) (iota 6))
+(my-length-2 (iota 5))
+
+;;; 2.34: horner method of evaluating polynomials
+(define (horner-eval x coefficient-lst)
+  ;; evaluate a polynomial via Horner's rule (an accumulation)
+  (accumulate (lambda (this-coef higher-terms)
+		(+ this-coef (* x higher-terms)))
+	      0
+	      coefficient-lst))
+
+(horner-eval 2 '(1 3 0 5 0 1))
+
+;;; 2.35: reexpressing count-leaves as an accumulation
+(define (count-leaves tree)
+  ;; reexpress count-leaves in terms of accumulate
+  ;; this is longer than the original but a POC
+  (accumulate +
+	      0
+	      (my-map (lambda (subtree)
+			(cond ([null? subtree] 0)
+			      ([not (pair? subtree)] 1)
+			      (#t (+ (count-leaves (car subtree))
+				     (count-leaves (cdr subtree))))))
+		      tree)))
+
+(count-leaves '(((1 2) 3 4) ((1 2) 3 4)))
+
+;;; 2.36
+(define (accumulate-n op init lsts)
+  ;; map an accumulate operation over a list of lists of the same length,
+  ;; orthogonal to the direction of the lists
+  ;; would be easier to do in terms of a transpose operation
+  (if [null? (car lsts)]
+      '()
+      (cons (accumulate op
+			init
+			(my-map (lambda (lst) (car lst)) lsts))
+	    (accumulate-n op
+			  init
+			  (my-map (lambda (lst) (cdr lst)) lsts)))))
+
+(define matrix1 '((1 2 3)
+		  (4 5 6)
+		  (7 8 9)
+		  (10 11 12)))
+(accumulate-n + 0 matrix1)
+
+;;; 2.37: matrix operations
+(define matrix2 '((1 2 3 4)
+		  (4 5 6 6)
+		  (6 7 8 9)))
+
+(define (dot-product v w)
+  ;; perform dot product of v and w
+  ;; here we use stdlib map because it uses the extended version
+  ;; (see footnote 12)
+  (accumulate + 0 (map * v w)))
+
+(define (matrix-*-vector m v)
+  ;; multiply a matrix by a column vector
+  (my-map (lambda (row) (dot-product row v)) m))
+
+(define (transpose mat)
+  ;; transposes a matrix
+  (accumulate-n cons '() mat))
+
+;;; alternative transpose using apply (haven't encountered yet) and general
+;;; form of map:
+;; (define (transpose mat)
+;;   (apply map list mat))
+
+(define (matrix-*-matrix m n)
+  ;; multiplies two matrices
+  (let ([cols (transpose n)])
+    (my-map (lambda (row) (matrix-*-vector cols row)) m)))
+
+(matrix-*-matrix matrix1 matrix2)
+(matrix-*-matrix matrix2 matrix1)
+
+;;; 2.38: fold-left
+;;; for fold-left and fold-right to be equal, op should be associative
+(define (my-fold-left op initial lst)
+  ;; left-associative version of accumulate, achieved by iterative version
+  (let iter ([result initial]
+	     [rest lst])
+    (if [null? rest]
+	result
+	(iter (op result (car rest))
+	      (cdr rest)))))
+(define my-fold-right accumulate)
+
+;;; both / and list are not associative, so we expect the results to be
+;;; different
+(my-fold-right / 1 (list 1 2 3))
+(my-fold-left / 1 (list 1 2 3))
+(my-fold-right cons '() '(1 2 3))
+(my-fold-left cons '() '(1 2 3))
+
+;;; 2.39
+(define (my-reverse lst)
+  ;; implementation of reverse in terms of fold-right
+  (my-fold-right (lambda (x y) (append y (list x)))
+		 '()
+		 lst))
+
+(my-reverse (iota 5))
+
+(define (my-reverse lst)
+  ;; implementation of reverse in terms of fold-left
+  (my-fold-left (lambda (x y) (cons y x))
+		'()
+		lst))
+
+(my-reverse (iota 5))
+
+;;; since lists and cons are naturally right-associative, e.g.:
+;;; '(1 2 3) = '(1 . (2 . (3 . ())))
+;;; then reverse is natually the opposite (left-associative)
+;;; '() + 1 -> (1)
+;;; (1) + 2 -> (2 1)
+;;; ...
+;;; whereas right associative is less efficient (requires append)
+;;; 4 + '() -> (4)
+;;; 3 + (4) -> (3 4)
+;;; ...

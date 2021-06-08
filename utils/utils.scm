@@ -18,7 +18,7 @@
 ;;; - function composition:
 ;;;   - double
 ;;;   - compose
-;;;   - autocompose (was called "repeated" in the exercise)
+;;;   - n-fold-compose (was called "repeated" in the exercise)
 ;;; 
 ;;; other possible functions to include here, will include if they get reused:
 ;;; - factorial (1.2)
@@ -29,20 +29,21 @@
 ;;; - timing function (1.2 exercises)
 ;;; - fixed-point method (1.3)
 ;;; - integration, derivative, newton's method (1.3)
-;;; - filtered-accumulate (1.3 -- waiting for a list version)
 ;;; - esieve (favorite algo)
 ;;; - range (enumerate-interval from 2.2)
+;;; - transpose a matrix, other matrix operations (2.2)
+;;; - power set or permutations of a set (2.2)
 ;;;
 ;;; possible constants to include here:
 ;;; - pi
 ;;; - e
 ;;; - phi/psi
 ;;; 
-;;; other cool algorithms, but already implemented in (chez) stdlib:
+;;; other cool/fundamental procedures, but already implemented in (chez) stdlib:
 ;;; - gcd (1.2)
 ;;; - expt (1.2 exercises, pow-4 (iterative with repeated squaring))
 ;;; - sqrt (1.3, using fixed-point method or Newton's method)
-;;; - accumulate (fold-left), filter, map (2.2)
+;;; - fold-left/right, filter, map (2.2)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; basic arithmetic
@@ -129,6 +130,7 @@
 	      ([random-test n]
 	       (iter (1- times)))
 	      (#t #f)))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; function composition
 
