@@ -564,3 +564,5 @@
 ;; 	  (adjoin-position new-row k rest-of-queens))
 ;; 	(queen-cols (1- k))
 ;;  (enumerate-interval 1 board-size))))
+
+;;; not doing painter problems

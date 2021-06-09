@@ -149,3 +149,11 @@
 	     sequence))
 
 (remove 5 '(1 5 2 5 3 5 4 5))
+
+;;; not doing painter problems
+
+;;; Levels of design for robust design
+;;; "Stratified design" is the idea that a complex system should be structured
+;;; as a sequence of layers that are described by a sequence of languages. At
+;;; each level, there are primitives and jargon appopriate to the level of
+;;; abstraction of that layer. Stratified design helps make systems more robust.
