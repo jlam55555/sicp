@@ -49,13 +49,13 @@
     ;; the two smallest trees, inserting it in the correct (sorted) position,
     ;; and then repeating
     ;; assumes trees are sorted by weight (as huffman-make-leaf-set does)
-    (if [< (length trees) 2]
-	trees
+    (if [null? (cdr trees)]
+	(car trees)
 	(successive-merge
 	 (huffman-leaf-set-adjoin (huffman-tree-make (car trees) (cadr trees))
 				  (cddr trees)))))
   
-  (car (successive-merge (huffman-leaf-set-make pairs))))
+  (successive-merge (huffman-leaf-set-make pairs)))
 
 (huffman-tree-generate '((A . 4)
 			 (B . 2)
@@ -84,7 +84,84 @@
 ;;; 36 symbols * 3 bits/symbol = 108; we save 26 bits, ~25%
 
 ;;; 2.71
-;;; TODO
+;;;
+;;; using a slightly simplified notation (omitting symbols):
+;;; note that the depth of a leaf is its number of bits required
+;;; 
+;; (leaf 1)				; n=1; this is a bit of an edge case
+;; 					; since we cannot encode anything with
+;; 					; zero bits per symbol
+;; ((leaf 1)
+;;  () 1)				; more practical n=1
+;; ((leaf 1)
+;;  (leaf 2) 3)				; n=2
+;; (((leaf 1)
+;;   (leaf 2) 3)
+;;  (leaf 4) 7)				; n=3
+;; ((((leaf 1)
+;;     (leaf 2) 3)
+;;    (leaf 4) 7)
+;;  (leaf 8) 15)			; n=4
+;; (((((leaf 1)
+;;     (leaf 2) 3)
+;;    (leaf 4) 7)
+;;   (leaf 8) 15)
+;;  (leaf 16) 31)			; n=5
+;;; 
+;;; the most frequent symbol (weight 2^(n-1)) always takes one bit to encode,
+;;; while the least frequent symbol (weight 1) always takes n-1 bits to encode
+;;; (except for n=1 case)
 
-;;; 2.72
-;;; TODO
+;;; 2.72: orders of growth for Huffman encoding
+;;; 
+;;; The order of growth is proportional to the time it takes to make a branch
+;;; decision times the depth of a symbol. This is hard because there are a lot
+;;; of possible variations of tree shapes. For now we will assume that the
+;;; branch decision takes O(N) time (i.e., using a linear search method as used
+;;; above) rather than O(log(N)) or O(1) with a set or hashtable representation.
+;;;
+;;; Further note the following implementation details:
+;;; - when making the tree, the successive-merge procedure always puts the
+;;;   subtree with the smaller weight as the left child
+;;; - when encoding a string, the encode procedure always scans the symbol set
+;;;   of the left child (only)
+;;;
+;;; For the example in 2.71, the analysis is easy. The depth of the symbols are
+;;; (1 2 3 4 ... n-1). Due to the implementation notes above, at depth d there
+;;; will be and (n-d-1) symbols on the left and 1 symbol on the right, so we
+;;; will have to scan on the order of O(n-d-1) at each depth d.
+;;;
+;;; For the symbol at depth 1, we would have n-0-1 ~= n operations
+;;; For depth 2, (n-1)+(n-2) operations ~= n^2 ops
+;;; For depth 3, (n-1)+(n-2)+(n-3) ops ~= n^3 ops
+;;; ...
+;;; For depth n-1, ~= n^(n-1) ops (two leaf nodes at this depth)
+;;;
+;;; Lastly, we have to average these according to their average frequencies.
+;;;
+;;; n/2 + n^2/2^2 + ... n^(n-1)/2^(n-1) + n^(n-1)/2^n
+;;; = \sum_{d=1}^{n}{(n/2)^d}
+;;; (approximate with infinite series: \sum r^n = a1/(1-r), |r| < 1)
+;;; = 2*n/2 = n
+;;; 
+;;; So each symbol takes O(N) to encode, where N is the size of the alphabet.
+;;;
+;;; (May not have gotten these calculations entirely correct, will need to
+;;; double-check with someone)
+;;;
+;;; Clearly there are a lot of repeated checks and this would be a lot better
+;;; if we scanned the right subtree's symbol list rather than the left subtree,
+;;; or if we put the subtree with the smaller weight on the right. And if we do
+;;; this, then the time complexity will worsen for some other case. This was an
+;;; unfortunate implementation detail caused by the use of a bad data structure
+;;; for sets.
+;;;
+;;; In the swapped situation described above, each branching decision would take
+;;; O(1) time, so the weighted sum would be instead:
+;;;
+;;; 1/2 + 2/2^2 + 3/2^3 + ... (n-1)/2^(n-1) + (n-1)/2^n
+;;; = \sum_{d=1}^{d}{d/2^d}
+;;; = 2 (in the infinite sum)
+;;;
+;;; So this implementation would take O(1) time to encode a symbol, which is
+;;; what you might expect given the relative frequencies of the symbol.
