@@ -127,192 +127,175 @@
 
 ;;; 2.3.3: representing sets
 
-;;; will start using modules when I have multiple versions of the same procedure
-;;; - note: emacs doesn't recognize ``module'' as a special form (module syntax
-;;;   is mostly specific to implementation I think?), so have to add this to
-;;;   .emacs file to get proper indentation:
-;; (put 'module 'scheme-indent-function 2)
-;;;   ref: https://stackoverflow.com/a/4200242
-;;; - TODO: try to separate interfaces from modules using a macro: see
-;;;   https://www.scheme.com/csug8/syntax.html
-;;; - note: modules provide an automatic way to prefix/namespace variables with
-;;;   the import prefix syntax, e.g.:
-;; (import (prefix set-unordered-list set::))
-;;;   so that you can do C++-like namespaces:
-;; (set::element? x set)
-;;;   see the examples below
+;;; representing sets as unordered lists (ulset-*)
+(define (ulset-element? x set)
+  ;; linear scan through elements: O(N)
+  ;; uses equal? rather than eq? -- this works for more than just symbols
+  (cond ([null? set] #f)
+	([equal? x (car set)] #t)
+	(#t (ulset-element? x (cdr set)))))
 
-(module set-unordered-list (element?
-			    adjoin
-			    intersection)
-  ;; representing sets as unordered lists
-  
-  (define (element? x set)
-    ;; linear scan through elements: O(N)
-    ;; uses equal? rather than eq? -- this works for more than just symbols
-    (cond ([null? set] #f)
-	  ([equal? x (car set)] #t)
-	  (#t (element? x (cdr set)))))
+(define (ulset-adjoin x set)
+  ;; add to set: O(N)
+  (if [ulset-element? x set]
+      set
+      (cons x set)))
 
-  (define (adjoin x set)
-    ;; add to set: O(N)
-    (if [element? x set]
-	set
-	(cons x set)))
+(define (ulset-intersection set1 set2)
+  ;; takes the set set-intersection: O(N^2)
+  (cond ([or (null? set1) (null? set2)] '())
+	([ulset-element? (car set1) set2]
+	 (cons (car set1)
+	       (ulset-intersection (cdr set1) set2)))
+	(#t (ulset-intersection (cdr set1) set2))))
 
-  (define (intersection set1 set2)
-    ;; takes the set intersection: O(N^2)
-    (cond ([or (null? set1) (null? set2)] '())
-	  ([element? (car set1) set2]
-	   (cons (car set1)
-		 (intersection (cdr set1) set2)))
-	  (#t (intersection (cdr set1) set2)))))
+;; implementation of a set using ordered lists (olset-*)
+(define (olset-element? x set)
+  ;; O(N/2) implementation of finding an element in a set
+  ;; (note that we can do better with a binary search, but we haven't
+  ;; defined a vector representation with O(1) lookups (yet?) in SICP)
+  (cond ([or (null? set) (< x (car set))] #f)
+	([= x (car set)] #t)
+	(#t (set-element? x (cdr set)))))
 
-(module set-ordered-list (element?
-			  adjoin
-			  intersection)
-  ;; implementation of a set using ordered lists
-  
-  (define (element? x set)
-    ;; O(N/2) implementation of finding an element in a set
-    ;; (note that we can do better with a binary search, but we haven't
-    ;; defined a vector representation with O(1) lookups (yet?) in SICP)
-    (cond ([or (null? set) (< x (car set))] #f)
-	  ([= x (car set)] #t)
-	  (#t (element? x (cdr set)))))
+(define (olset-adjoin set1 set2)
+  ;; will be implemented as exercise 2.51
+  (error 'olset-adjoin "not implemented yet"))
 
-  ;; TODO: implement adjoin (exercise 2.61)
-  ;; for now, just import the one from the previous module
-  (import (only set-unordered-list adjoin))
-
-  (define (intersection set1 set2)
-    ;; ordered list representation of ; O(N) rather than O(N^2)
-    (if [or (null? set1) (null? set2)]
-	'()
-	(let ([x1 (car set1)]
-	      [x2 (car set2)])
-	  (cond ([= x1 x2]
-		 (cons x1
-		       (intersection (cdr set1)
+(define (olset-intersection set1 set2)
+  ;; ordered list representation of ; O(N) rather than O(N^2)
+  (if [or (null? set1) (null? set2)]
+      '()
+      (let ([x1 (car set1)]
+	    [x2 (car set2)])
+	(cond ([= x1 x2]
+	       (cons x1
+		     (olset-intersection (cdr set1)
 					 (cdr set2))))
-		([< x1 x2]
-		 (intersection (cdr set1) set2))
-		([< x2 x1]
-		 (intersection set1 (cdr set2))))))))
+	      ([< x1 x2]
+	       (olset-intersection (cdr set1) set2))
+	      ([< x2 x1]
+	       (olset-intersection set1 (cdr set2)))))))
 
-(module set-binary-tree (element?
-			 adjoin
-			 intersection)
-  ;; binary search tree implementation of a set
+;; binary search tree implementation of a set (btset-*)
 
-  ;; helpers
-  (define (entry tree) (car tree))
-  (define (left-branch tree) (cadr tree))
-  (define (right-branch tree) (caddr tree))
-  (define (tree-make entry left right)
-    (list entry left right))
+;; helpers
+(define (btset-entry tree) (car tree))
+(define (btset-left-branch tree) (cadr tree))
+(define (btset-right-branch tree) (caddr tree))
+(define (btset-tree-make entry left right)
+  (list entry left right))
 
-  (define (element? x set)
-    ;; O(log(N)) implementation to search for element in set
-    (cond ([null? set] #f)
-	  ([= x (entry set)] #t)
-	  ([< x (entry set)]
-	   (element? x (left-branch set)))
-	  ([> x (entry set)]
-	   (element? x (right-branch set)))))
+(define (btset-set-element? x set)
+  ;; O(log(N)) implementation to search for element in set
+  (cond ([null? set] #f)
+	([= x (btset-entry set)] #t)
+	([< x (btset-entry set)]
+	 (btset-element? x (btset-left-branch set)))
+	([> x (btset-entry set)]
+	 (btset-element? x (btset-right-branch set)))))
 
-  (define (adjoin x set)
-    ;; add an element to a set: O(log(N))
-    (cond ([null? set]
-	   (tree-make x '() '()))
-	  ([= x (entry set)] set)
-	  ([< x (entry set)]
-	   (tree-make (entry set)
-		      (adjoin x (left-branch set))
-		      (right-branch set)))
-	  ([> x (entry set)]
-	   (tree-make (entry set)
-		      (left-branch set)
-		      (adjoin x (right-branch set))))))
+(define (btset-adjoin x set)
+  ;; add an element to a set: O(log(N))
+  (cond ([null? set]
+	 (btset-tree-make x '() '()))
+	([= x (btset-entry set)] set)
+	([< x (btset-entry set)]
+	 (btset-tree-make (btset-entry set)
+			  (btset-adjoin x (btset-left-branch set))
+			  (btset-right-branch set)))
+	([> x (btset-entry set)]
+	 (btset-tree-make (btset-entry set)
+			  (btset-left-branch set)
+			  (btset-adjoin x (btset-right-branch set))))))
 
-  (define (intersection set1 set2)
-    ;; will be implemented as exercise 2.65
-    (error 'intersection "not implemented yet")))
+(define (btset-intersection set1 set2)
+  ;; will be implemented as exercise 2.65
+  (error 'btset-intersection "not implemented yet"))
 
-;;; TODO: add some examples of sets and module namespacing here
+;;; examples
+(ulset-adjoin 5 '(5 2 3 4 1))
+(ulset-adjoin 6 '(5 2 3 4 1))
+
+;;; sample BST:
+;;;    3
+;;;  2   5
+;;; 1   4
+(btset-adjoin 5 '(3 (2 (1 () ()) ()) (5 (4 () ()) ())))
+(btset-adjoin 6 '(3 (2 (1 () ()) ()) (5 (4 () ()) ())))
+(btset-adjoin 3.5 '(3 (2 (1 () ()) ()) (5 (4 () ()) ())))
+
+(ulset-intersection '(5 2 3 4 1) '(1 -1 5 7 3))
+(olset-intersection '(1 2 3 4 5) '(-1 1 3 5 7))
 
 ;;; 2.3.4: Huffman Encoding Trees
-(module huffman-encoding (tree-make
-			  leaf-make
-			  decode)
-  ;; an implementation of the huffman encoding
 
-  ;; helper functions: leaves represent a member of the alphabet
-  (define (leaf-make symbol weight)
-    (list 'leaf symbol weight))
-  (define (leaf? object)
-    (eq? (car object) 'leaf))
-  (define (leaf-symbol x) (cadr x))
-  (define (leaf-weight x) (caddr x))
-  
-  (define (tree-make left right)
-    ;; represent a huffman (sub)tree as the left child, the right child,
-    ;; the members of the alphabet in this tree, and the weight of the tree
-    (list left
-	  right
-	  (append (tree-symbols left) (tree-symbols right))
-	  (+ (tree-weight left) (tree-weight right))))
+;; helper functions: leaves represent a member of the alphabet
+(define (huffman-leaf-make symbol weight)
+  (list 'leaf symbol weight))
+(define (huffman-leaf? object)
+  (eq? (car object) 'leaf))
+(define (huffman-leaf-symbol x) (cadr x))
+(define (huffman-leaf-weight x) (caddr x))
 
-  (define (tree-left-branch tree) (car tree))
-  (define (tree-right-branch tree) (cadr tree))
+(define (huffman-tree-make left right)
+  ;; represent a huffman (sub)tree as the left child, the right child,
+  ;; the members of the alphabet in this tree, and the weight of the tree
+  (list left
+	right
+	(append (huffman-tree-symbols left) (huffman-tree-symbols right))
+	(+ (huffman-tree-weight left) (huffman-tree-weight right))))
 
-  (define (tree-symbols tree)
-    ;; get symbol from leaf or symbols from subtree as a list
-    (if [leaf? tree]
-	(list (leaf-symbol tree))
-	(caddr tree)))
+(define (huffman-tree-left-branch tree) (car tree))
+(define (huffman-tree-right-branch tree) (cadr tree))
 
-  (define (tree-weight tree)
-    ;; get weight of a leaf or subtree
-    (if [leaf? tree]
-	(leaf-weight tree)
-	(cadddr tree)))
+(define (huffman-tree-symbols tree)
+  ;; get symbol from leaf or symbols from subtree as a list
+  (if [huffman-leaf? tree]
+      (list (huffman-leaf-symbol tree))
+      (caddr tree)))
+
+(define (huffman-tree-weight tree)
+  ;; get weight of a leaf or subtree
+  (if [huffman-leaf? tree]
+      (huffman-leaf-weight tree)
+      (cadddr tree)))
+
+(define (huffman-decode bits tree)
+  ;; huffman-decode a string of bits with a huffman tree
 
   (define (choose-branch bit branch)
-    ;; helper for decode
-    (cond ([= bit 0] (tree-left-branch branch))
-	  ([= bit 1] (tree-right-branch branch))
+    ;; helper for huffman-decode
+    (cond ([= bit 0] (huffman-tree-left-branch branch))
+	  ([= bit 1] (huffman-tree-right-branch branch))
 	  (#t (error 'choose-branch "bad bit" bit))))
+  
+  (let huffman-decode-1 ([bits bits]
+			 [current-branch tree])
+    (if [null? bits]
+	'()
+	(let ([next-branch
+	       (choose-branch (car bits) current-branch)])
+	  (if [huffman-leaf? next-branch]
+	      (cons (huffman-leaf-symbol next-branch)
+		    (huffman-decode-1 (cdr bits) tree))
+	      (huffman-decode-1 (cdr bits) next-branch))))))
 
-  (define (decode bits tree)
-    ;; decode a string of bits with a huffman tree
-    (let decode-1 ([bits bits]
-		   [current-branch tree])
-      (if [null? bits]
-	  '()
-	  (let ([next-branch
-		 (choose-branch (car bits) current-branch)])
-	    (if [leaf? next-branch]
-		(cons (leaf-symbol next-branch)
-		      (decode-1 (cdr bits) tree))
-		(decode-1 (cdr bits) next-branch))))))
+(define (huffman-leaf-set-adjoin x set)
+  ;; similar to the set-adjoin function for sets; helper for leaf-set-make
+  ;; keeps track of the set as an ordered list (ordered by weight)
+  (cond ([null? set]
+	 (list x))
+	([< (huffman-tree-weight x) (huffman-tree-weight (car set))]
+	 (cons x set))
+	(#t (cons (car set)
+		  (huffman-leaf-set-adjoin x (cdr set))))))
 
-  (define (adjoin-set x set)
-    ;; TODO
-    222)
-
-  (define (make-leaf-set pairs)
-    ;; TODO
-    222))
-
-;;; 2.67
-(import (prefix huffman-encoding huff::))
-(define sample-tree
-  (huff::tree-make (huff::leaf-make 'A 4)
-		   (huff::tree-make
-		    (huff::leaf-make 'B 2)
-		    (huff::tree-make (huff::leaf-make 'D 1)
-				     (huff::leaf-make 'C 1)))))
-(define sample-message '(0 1 1 0 0 1 0 1 0 1 1 1 0))
-
-(huff::decode sample-message sample-tree)
+(define (huffman-leaf-set-make pairs)
+  ;; makes an (ordered) set of leaves from association list of the alphabet
+  (if [null? pairs]
+      '()
+      (let ([pair (car pairs)])
+	(huffman-leaf-set-adjoin (huffman-leaf-make (car pair)
+						    (cdr pair))
+				 (huffman-leaf-set-make (cdr pairs))))))
