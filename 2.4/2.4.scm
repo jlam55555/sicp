@@ -267,3 +267,20 @@ op-type-table
 
 (complex/ z1-ri z2-ma)
 (complex/ z1-ri z2-ri)
+
+;;; message passing (as opposed to data-directed programming)
+(define (make-real-imag-mp x y)
+  (lambda (op)
+    (cond ([eq? op 'real-part] x)
+	  ([eq? op 'imag-part] y)
+	  ([eq? op 'magnitude]
+	   (sqrt (+ (square x) (square y))))
+	  ([eq? op 'angle] (atan y x))
+	  (#t
+	   (error 'real-imag-dispatch "unknown op" op)))))
+
+(define z-mp (make-real-imag-mp 3 4))
+(z-mp 'real-part)
+(z-mp 'imag-part)
+(z-mp 'magnitude)
+(z-mp 'angle)
