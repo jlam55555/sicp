@@ -100,37 +100,34 @@
 ;;; We need an implementation of the put and get operators described in this
 ;;; section. We will use a very basic association list structure. A better
 ;;; version can be created using a hashtable (included in the stdlib).
-;;; This will be defined in a module for better encapsulation, but it is not
-;;; really necessary. In hindsight this is probably easier to do with the
-;;; builtin hashtable implementation and everything in the module is exported,
-;;; so this implementation is somewhat silly.
-(module (put get clear-op-type-table op-type-table)
-  (define op-type-table
-    ;; an assoc list of functions with their associated operator and
-    ;; parameter types; is exposed for debugging reasons but wouldn't
-    ;; normally be exposed
-    '())
-  
-  (define (put op type item)
-    ;; adds item to the op-type-table, indexed by op and type; updates
-    ;; if already exists
-    (let* ([key (cons op type)]
-	   [found (assoc key op-type-table)])
-      (if found
-	  (set-cdr! found item)
-	  (set! op-type-table
-		(cons (cons (cons op type) item)
-		      op-type-table)))))
+;;; In hindsight this is probably easier to do with the builtin hashtable
+;;; implementation, so this is a little naive.
+(define op-type-table
+  ;; an assoc list of functions with their associated operator and
+  ;; parameter types; is exposed for debugging reasons but wouldn't
+  ;; normally be exposed
+  '())
 
-  (define (get op type)
-    ;; returns the function indexed by op and type in the op-type-table,
-    ;; or false if not found
-    (let ([found (assoc (cons op type) op-type-table)])
-      (and found (cdr found))))
+(define (put op type item)
+  ;; adds item to the op-type-table, indexed by op and type; updates
+  ;; if already exists
+  (let* ([key (cons op type)]
+	 [found (assoc key op-type-table)])
+    (if found
+	(set-cdr! found item)
+	(set! op-type-table
+	      (cons (cons (cons op type) item)
+		    op-type-table)))))
 
-  (define (clear-op-type-table)
-    ;; in case there's a need to clear the op-type-table
-    (set! op-type-table '())))
+(define (get op type)
+  ;; returns the function indexed by op and type in the op-type-table,
+  ;; or false if not found
+  (let ([found (assoc (cons op type) op-type-table)])
+    (and found (cdr found))))
+
+(define (clear-op-type-table)
+  ;; in case there's a need to clear the op-type-table
+  (set! op-type-table '()))
 
 (define (install-rectangular-package)
   ;; puts the rectangular complex number procedures into the op-type table
