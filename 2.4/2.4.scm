@@ -102,9 +102,14 @@
 ;;; version can be created using a hashtable (included in the stdlib).
 ;;; This will be defined in a module for better encapsulation, but it is not
 ;;; really necessary. In hindsight this is probably easier to do with the
-;;; builtin hashtable implementation, this was just silly.
-(module (put get clear-op-type-table pt)
-  (define op-type-table '())
+;;; builtin hashtable implementation and everything in the module is exported,
+;;; so this implementation is somewhat silly.
+(module (put get clear-op-type-table op-type-table)
+  (define op-type-table
+    ;; an assoc list of functions with their associated operator and
+    ;; parameter types; is exposed for debugging reasons but wouldn't
+    ;; normally be exposed
+    '())
   
   (define (put op type item)
     ;; adds item to the op-type-table, indexed by op and type; updates
@@ -125,14 +130,140 @@
 
   (define (clear-op-type-table)
     ;; in case there's a need to clear the op-type-table
-    (set! op-type-table '()))
+    (set! op-type-table '())))
 
-  (define (pt)
-    op-type-table))
+(define (install-rectangular-package)
+  ;; puts the rectangular complex number procedures into the op-type table
+  
+  ;; internal procedures -- note we don't have to worry about namespacing
+  ;; these names anymore because they are properly scoped in the install
+  ;; rectangular package
+  (define (real-part z) (car z))
+  (define (imag-part z) (cdr z))
+  (define (make-real-imag x y) (cons x y))
+  (define (magnitude z)
+    (sqrt (+ (square (real-part z))
+	     (square (imag-part z)))))
+  (define (angle z)
+    (atan (imag-part z) (real-part z)))
+  (define (make-mag-ang r a)
+    (cons (* r (cos a)) (* r (sin a))))
 
-(clear-op-type-table)
-(pt)
-(put 'make 'rect 32)
-(put 'add '(rect tre) 2)
+  ;; interface to the rest of the system
+  (define (tag x) (tag-attach 'rectangular x))
+  (put 'real-part '(rectangular) real-part)
+  (put 'imag-part '(rectangular) imag-part)
+  (put 'magnitude '(rectangular) magnitude)
+  (put 'angle '(rectangular) angle)
+  (put 'make-real-imag 'rectangular
+       (lambda (x y) (tag (make-real-imag x y))))
+  (put 'make-mag-ang 'rectangular
+       (lambda (r a) (tag (make-mag-ang r a))))
 
-(get 'add '(rect tre))
+  ;; give the function a return value
+  'done)
+
+(define (install-polar-package)
+  ;; puts the polar complex number procedures into the op-type table
+
+  ;; internal procedures
+  (define (magnitude z) (car z))
+  (define (angle z) (cdr z))
+  (define (make-mag-ang r a) (cons r a))
+  (define (real-part z)
+    (* (magnitude z) (cos (angle z))))
+  (define (imag-part z)
+    (* (magnitude z) (sin (angle z))))
+  (define (make-real-imag x y)
+    (cons (sqrt (+ (square x) (square y)))
+	  (atan y x)))
+
+  ;; interface to the rest of the system
+  (define (tag x) (tag-attach 'polar x))
+  (put 'real-part '(polar) real-part)
+  (put 'imag-part '(polar) imag-part)
+  (put 'magnitude '(polar) magnitude)
+  (put 'angle '(polar) angle)
+  (put 'make-real-imag 'polar
+       (lambda (x y) (tag (make-real-imag x y))))
+  (put 'make-mag-ang 'polar
+       (lambda (r a) (tag (make-mag-ang r a))))
+  
+  'done)
+
+;;; install the generic code into the op-type table; optionally clear it
+;;; beforehand (shouldn't be necessary)
+;; (clear-op-type-table)
+(install-rectangular-package)
+(install-polar-package)
+
+;;; introspect the op-type table
+op-type-table
+
+(define (apply-generic op . args)
+  ;; apply a generic function in the op-type table by matching its op and args
+  (let ([tag-types (map tag-type args)])
+    (let ([proc (get op tag-types)])
+      (if proc
+	  (apply proc (map tag-contents args))
+	  (errorf 'apply-generic
+		  "No method ~a for types ~a"
+		  op tag-types)))))
+
+;;; implementing generic procedures that are directly dependent on underlying
+;;; representation; these don't even have to be namespaced under complex-*
+;;; because they're generic
+;;;
+;;; still namespace these with complex because they are only for complex numbers
+;;; and to avoid shadowing the builtin functions with the same name
+(define (complex-real-part z)
+  (apply-generic 'real-part z))
+(define (complex-imag-part z)
+  (apply-generic 'imag-part z))
+(define (complex-magnitude z)
+  (apply-generic 'magnitude z))
+(define (complex-angle z)
+  (apply-generic 'angle z))
+
+;;; implementing constructors; these are different because the inputs may not
+;;; be tagged, so we use a different convention
+(define (complex-make-real-imag x y)
+  ((get 'make-real-imag 'rectangular) x y))
+(define (complex-make-mag-ang r a)
+  ((get 'make-mag-ang 'polar) r a))
+
+;;; the operations complex+, complex-, complex*, and complex/ are built on
+;;; top of these abstractions and can be used without modification
+
+;;; some test cases
+(define z1-ri
+  (complex-make-real-imag 3 4))
+(define z2-ri
+  (let ([xy (/ (sqrt 2) 2)])
+    (complex-make-real-imag xy xy)))
+
+(define z1-ma
+  (complex-make-mag-ang (complex-magnitude z1-ri)
+			(complex-angle z1-ri)))
+(define z2-ma
+  (complex-make-mag-ang (complex-magnitude z2-ri)
+			(complex-angle z2-ri)))
+
+;;; see that the above two representations are equivalent
+(complex-real-part z1-ma)
+(complex-imag-part z1-ma)
+(complex-real-part z2-ma)
+(complex-imag-part z2-ma)
+
+;;; can mix types! Note that this is because the arithmetic operations
+;;; are built on top of abstractions and are thus not directly dependent
+;;; on the internal data representation -- when it does become dependent
+;;; on the data representation (as we'll see in the next section) this will
+;;; become more complex
+(complex+ z1-ri z2-ri)
+(complex+ z1-ri z2-ma)
+(complex+ z1-ma z2-ri)
+(complex+ z1-ma z2-ma)
+
+(complex/ z1-ri z2-ma)
+(complex/ z1-ri z2-ri)
