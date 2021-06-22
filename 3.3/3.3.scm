@@ -171,7 +171,7 @@
 	[e (make-wire)])
     (or-gate a b d)
     (and-gate a b c)
-    (inverter c e)
+    (not-gate c e)
     (and-gate d e s)
     'ok))
 
@@ -185,18 +185,182 @@
     (or-gate c1 c2 c-out)
     'ok))
 
-;;; interface
-;; (get-signal wire)
-;; (set-signal! wire new-value)
-;; (add-action! wire thunk)
-;; (after-delay delay thunk)
+;;; wire interface
+;; (make-wire)
+;; (wire-get-signal wire)
+;; (wire-set-signal! wire new-value)
+;; (wire-add-action! wire thunk)
 
-(define (inverter input output)
-  ;; inverter block
-  (define (invert-input)
-    (let ([new-value (logical-not (get-signal input))])
-      (after-delay inverter-delay
-		   (lambda ()
-		     (set-signal! (output new-value))))))
-  (add-action! input invert-input)
+;;; these gates change the output one time-step after an input changes
+
+(define (not-gate input output)
+  (define (perform-not)
+    (let ([new-value (not (wire-get-signal input))])
+      (agenda-after-delay not-gate-delay
+			  (lambda ()
+			    (wire-set-signal! output new-value)))))
+  (wire-add-action! input perform-not)
   'ok)
+
+(define (and-gate input-1 input-2 output)
+  (define (perform-and)
+    (let ([new-value (and (wire-get-signal input-1)
+			  (wire-get-signal input-2))])
+      (agenda-after-delay and-gate-delay
+			  (lambda ()
+			    (wire-set-signal! output new-value)))))
+  (wire-add-action! input-1 perform-and)
+  (wire-add-action! input-2 perform-and)
+  'ok)
+
+(define (or-gate input-1 input-2 output)
+  (define (perform-or)
+    (let ([new-value (or (wire-get-signal input-1)
+			 (wire-get-signal input-2))])
+      (agenda-after-delay or-gate-delay
+			  (lambda ()
+			    (wire-set-signal! output new-value)))))
+  (wire-add-action! input-1 perform-or)
+  (wire-add-action! input-2 perform-or)
+  'ok)
+
+(define (make-wire)
+  (let ([signal-value #f]
+	[action-procedures '()])
+    (define (wire-set-signal! new-value)
+      (when [not (boolean=? signal-value new-value)]
+	(set! signal-value new-value)
+	(for-each (lambda (x) (x))
+		  action-procedures)))
+    (define (accept-action-procedure! thunk)
+      (set! action-procedures
+	    (cons thunk action-procedures))
+      ;; note that we call thunk here! see exercise 3.31
+      (thunk))
+    (define (dispatch m)
+      (cond ([eq? m 'wire-get-signal] signal-value)
+	    ([eq? m 'wire-set-signal!] wire-set-signal!)
+	    ([eq? m 'wire-add-action!] accept-action-procedure!)
+	    ([eq? m 'wire-get-actions] action-procedures) ; for debugging
+	    (#t (error 'make-wire "unknown operation" m))))
+    dispatch))
+
+(define (wire-get-signal wire)
+  (wire 'wire-get-signal))
+(define (wire-set-signal! wire new-value)
+  ((wire 'wire-set-signal!) new-value))
+(define (wire-add-action! wire thunk)
+  ((wire 'wire-add-action!) thunk))
+(define (wire-get-actions wire)
+  (wire 'wire-get-actions))
+
+;;; agenda interface
+;; (make-agenda)
+;; (agenda-empty? agenda)
+;; (agenda-top agenda)
+;; (agenda-pop! agenda)
+;; (agenda-add! time action agenda)
+;; (agenda-current-time agenda)
+;; (agenda-after-delay delay thunk)
+
+(define (agenda-after-delay delay action)
+  ;; adds an action to the agenda after a delay
+  (agenda-add! (+ delay (agenda-current-time *agenda*))
+	       action
+	       *agenda*))
+
+(define (agenda-propagate)
+  ;; executes all actions in an agenda until complete
+  (unless [agenda-empty? *agenda*]
+    (let ([first-item (agenda-top *agenda*)])
+      (first-item)
+      (agenda-pop! *agenda*)
+      (agenda-propagate))))
+
+(define (sim-probe name wire)
+  ;; probes a wire so that every time the signal changes, it prints out
+  ;; the new value
+  (wire-add-action!
+   wire
+   (lambda ()
+     (format #t "~a ~a ~a\n"
+	     name
+	     (agenda-current-time *agenda*)
+	     (wire-get-signal wire)))))
+
+;;; time segments are a data structure used to implement the queue
+(define (make-time-segment time queue) (cons time queue))
+(define (time-segment-time s) (car s))
+(define (time-segment-queue s) (cdr s))
+
+;;; note that the agenda data structure comprises the current time
+;;; as well as a list of segments
+(define (make-agenda) (list 0))
+(define (agenda-current-time agenda) (car agenda))
+(define (agenda-set-current-time! agenda time) (set-car! agenda time))
+(define (agenda-segments agenda) (cdr agenda))
+(define (agenda-set-segments! agenda segments) (set-cdr! agenda segments))
+(define (agenda-first-segment agenda) (car (agenda-segments agenda)))
+(define (agenda-rest-segments agenda) (cdr (agenda-segments agenda)))
+(define (agenda-empty? agenda) (null? (agenda-segments agenda)))
+
+(define (agenda-add! time action agenda)
+  ;; add an action to an agenda; uses queue implementation from earlier
+  (define (belongs-before? segments)
+    (or (null? segments)
+	(< time (time-segment-time (car segments)))))
+  (define (make-new-time-segment time action)
+    (let ([q (make-queue)])
+      (queue-insert! q action)
+      (make-time-segment time q)))
+  (define (add-to-segments! segments)
+    (if [= (time-segment-time (car segments)) time]
+	(queue-insert! (time-segment-queue (car segments))
+		       action)
+	(let ([rest (cdr segments)])
+	  (if [belongs-before? rest]
+	      (set-cdr! segments
+			(cons (make-new-time-segment time action)
+			      (cdr segments)))
+	      (add-to-segments! rest)))))
+  (let ([segments (agenda-segments agenda)])
+    (if [belongs-before? segments]
+	(agenda-set-segments!
+	 agenda
+	 (cons (make-new-time-segment time action) segments))
+	(add-to-segments! segments))))
+
+(define (agenda-pop! agenda)
+  (let ([q (time-segment-queue (agenda-first-segment agenda))])
+    (queue-delete! q)
+    (when [queue-empty? q]
+      (agenda-set-segments! agenda (agenda-rest-segments agenda)))))
+
+(define (agenda-top agenda)
+  (if [agenda-empty? agenda]
+      (error 'agenda-top "agenda is empty")
+      (let ([first-seg (agenda-first-segment agenda)])
+	(agenda-set-current-time! agenda (time-segment-time first-seg))
+	(queue-front (time-segment-queue first-seg)))))
+
+(define *agenda*
+  ;; single global agenda
+  (make-agenda))
+
+(define not-gate-delay 2)
+(define and-gate-delay 3)
+(define or-gate-delay 5)
+
+(define input-1 (make-wire))
+(define input-2 (make-wire))
+(define sum (make-wire))
+(define carry (make-wire))
+(sim-probe 'sum sum)
+(sim-probe 'carry carry)
+
+(half-adder input-1 input-2 sum carry)
+(wire-set-signal! input-1 #t)
+(agenda-propagate)
+
+(wire-set-signal! input-2 #t)
+(agenda-propagate)
