@@ -1,6 +1,8 @@
 ;;; notes from sicp 3.3: Modeling with Mutable Data
 (load "../utils/utils.scm")
 
+;;; random note: C-M-Space is a really useful (and ergonomic) command
+
 ;;; compound objects with mutable state will now have mutators in addition
 ;;; to constructors and setters
 ;;;
@@ -364,3 +366,223 @@
 
 (wire-set-signal! input-2 #t)
 (agenda-propagate)
+
+;;; 3.3.5: a constraint solver
+;;; basically, once we have a new value to a block, we propagate those value
+;;; to any connected block whose value can now be computed
+
+;;; desired connector API:
+;; (connector-has-value? connector)
+;; (connector-get-value connector)
+;; (connector-set-value! connector new-value informant)
+;; (connector-forget-value! connector retractor)
+;; (connector-connect connector new-constraint)
+
+(define (make-connector)
+  (let ([value #f]
+	[informant #f]
+	[constraints '()])
+    (define (set-value! new-value setter)
+      (cond ([not (connector-has-value? me)]
+	     (set! value new-value)
+	     (set! informant setter)
+	     (for-each-except setter
+			      constraint-notify-new-value
+			      constraints))
+	    ([not (= value new-value)]
+	     (errorf 'connector-set-value!
+		     "contradiction: ~a != ~a"
+		     value
+		     new-value))
+	    (#t 'ignored)))
+    (define (forget-value! retractor)
+      ;; only forget if the retractor was the informant (i.e., if this was
+      ;; the one that first set the value
+      (if [eq? retractor informant]
+	  [begin
+	    (set! informant #f)
+	    (for-each-except retractor
+			     constraint-notify-forget-value
+			     constraints)]
+	  'ignored))
+    (define (connect new-constraint)
+      (when [not (memq new-constraint constraints)]
+	(set! constraints
+	      (cons new-constraint constraints)))
+      (when [connector-has-value? me]
+	(constraint-notify-new-value new-constraint))
+      'done)
+    (define (me request)
+      (cond ([eq? request 'has-value?]
+	     (if informant #t #f))
+	    ([eq? request 'get-value] value)
+	    ([eq? request 'set-value!] set-value!)
+	    ([eq? request 'forget-value!] forget-value!)
+	    ([eq? request 'connect] connect)
+	    (#t (error 'connector "unknown operation" request))))
+    me))
+
+(define (for-each-except exception procedure list)
+  ;; helper function for the above
+  (for-each (lambda (x)
+	      (unless (eq? x exception)
+		(procedure x)))
+	    list))
+
+(define (connector-has-value? connector)
+  (connector 'has-value?))
+(define (connector-get-value connector)
+  (connector 'get-value))
+(define (connector-set-value! connector new-value informant)
+  ((connector 'set-value!) new-value informant))
+(define (connector-forget-value! connector retractor)
+  ((connector 'forget-value!) retractor))
+(define (connector-connect connector new-constraint)
+  ((connector 'connect) new-constraint))
+
+;;; desired constraint system API:
+;; (constraint-multiplier input-1 input-2 product)
+;; (constraint-adder input-1 input-2 sum)
+;; (constraint-constant value connector)
+;; (constraint-probe name connector)
+
+;;; in the following constraint boxes, we use `me` to refer to the current
+;;; "object" -- in the past, we called this `dispatch`, but now we are calling
+;;; it akin to `this` or `self` in other programming languages
+
+(define (constraint-adder input-1 input-2 sum)
+  (define (process-new-value)
+    (cond ([and (connector-has-value? input-1)
+		(connector-has-value? input-2)]
+	   (connector-set-value!
+	    sum
+	    (+ (connector-get-value input-1)
+	       (connector-get-value input-2))
+	    me))
+	  ([and (connector-has-value? input-1)
+		(connector-has-value? sum)]
+	   (connector-set-value!
+	    input-2
+	    (- (connector-get-value sum)
+	       (connector-get-value input-1))
+	    me))
+	  ([and (connector-has-value? input-2)
+		(connector-has-value? sum)]
+	   (connector-set-value!
+	    input-1
+	    (- (connector-get-value sum)
+	       (connector-get-value input-2))
+	    me))))
+  (define (process-forget-value)
+    (connector-forget-value! input-1 me)
+    (connector-forget-value! input-2 me)
+    (connector-forget-value! sum me)
+    (process-new-value))
+  (define (me request)
+    (cond ([eq? request 'new-value] (process-new-value))
+	  ([eq? request 'forget-value] (process-forget-value))
+	  (#t (error 'constraint-adder "unknown request" request))))
+  (connector-connect input-1 me)
+  (connector-connect input-2 me)
+  (connector-connect sum me)
+  me)
+
+(define (constraint-multiplier input-1 input-2 product)
+  (define (process-new-value)
+    (cond ([or (and (connector-has-value? input-1)
+		    (zero? (connector-get-value input-1)))
+	       (and (connector-has-value? input-2)
+		    (zero? (connector-get-value input-2)))]
+	   (connector-set-value! product 0 me))
+	  ([and (connector-has-value? input-1)
+		(connector-has-value? input-2)]
+	   (connector-set-value!
+	    product
+	    (* (connector-get-value input-1)
+	       (connector-get-value input-2))
+	    me))
+	  ([and (connector-has-value? input-1)
+		(connector-has-value? product)]
+	   (connector-set-value!
+	    input-2
+	    (/ (connector-get-value product)
+	       (connector-get-value input-1))
+	    me))
+	  ([and (connector-has-value? input-2)
+		(connector-has-value? product)]
+	   (connector-set-value!
+	    input-1
+	    (/ (connector-get-value product)
+	       (connector-get-value input-2))
+	    me))))
+  (define (process-forget-value)
+    (connector-forget-value! input-1 me)
+    (connector-forget-value! input-2 me)
+    (connector-forget-value! product me)
+    (process-new-value))
+  (define (me request)
+    (cond ([eq? request 'new-value] (process-new-value))
+	  ([eq? request 'forget-value] (process-forget-value))
+	  (#t (error 'constraint-multiplier "unknown request" request))))
+  (connector-connect input-1 me)
+  (connector-connect input-2 me)
+  (connector-connect product me)
+  me)
+
+(define (constraint-constant value connector)
+  (define (me request)
+    (error 'constraint-constant "unknown request" request))
+  (connector-connect connector me)
+  (connector-set-value! connector value me)
+  me)
+
+;;; it's cool that we can treat a probe as a constraint as well
+(define (constraint-probe name connector)
+  (define (print-probe value)
+    (format #t "Probe: ~a = ~a\n" name value))
+  (define (process-new-value)
+    (print-probe (connector-get-value connector)))
+  (define (process-forget-value)
+    (print-probe "??"))
+  (define (me request)
+    (cond ([eq? request 'new-value]
+	   (process-new-value))
+	  ([eq? request 'forget-value]
+	   (process-forget-value))
+	  (#t (error 'constraint-probe "unknown request" request))))
+  (connector-connect connector me)
+  me)
+
+;;; constraint helpers
+(define (constraint-notify-new-value constraint)
+  (constraint 'new-value))
+(define (constraint-notify-forget-value constraint)
+  (constraint 'forget-value))
+
+;;; sample usage of constraint system
+(define (celsius-fahrenheit-converter c f)
+  (let ([u (make-connector)]
+	[v (make-connector)]
+	[w (make-connector)]
+	[x (make-connector)]
+	[y (make-connector)])
+    (constraint-multiplier c w u)
+    (constraint-multiplier v x u)
+    (constraint-adder v y f)
+    (constraint-constant 9 w)
+    (constraint-constant 5 x)
+    (constraint-constant 32 y)
+    'ok))
+
+(define C (make-connector))
+(define F (make-connector))
+(celsius-fahrenheit-converter C F)
+
+(constraint-probe "Celsius value" C)
+(constraint-probe "Fahrenheit value" F)
+
+(connector-set-value! C 25 'user)
+;; (connector-set-value! F 212 'user)	; contradiction
+
+(connector-forget-value! C 'user)
+(connector-set-value! F 212 'user)
