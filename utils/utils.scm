@@ -69,7 +69,7 @@
 
 (define (divides? a b)
   ;; test if a|b (a divides b)
-  (zero? (remainder b a)))
+  (fxzero? (fxremainder b a)))
 
 (define (coprime? a b)
   ;; tests whether two numbers are relatively prime
