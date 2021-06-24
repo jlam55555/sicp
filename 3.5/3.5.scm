@@ -290,7 +290,8 @@
 
 ;;; need this from exercise 3.55
 (define (partial-sums s)
-  ;; partial sums of the stream s
+  ;; partial sums of the stream s; still too lazy to implement the generic
+  ;; form of stream-map so will use stream-zip again
   (letrec ([part-sums (stream-cons
 		       0
 		       (stream-map
@@ -364,3 +365,71 @@
       (stream-cons (stream-car s1)
 		   (stream-interleave s2 (stream-cdr s1)))))
 
+;;; sicp presents here an example of an integral as a stream, which is basically
+;;; the same as the partial-sums stream
+
+;;; i'll finally define these two because they keep getting used
+(define (stream-add s1 s2)
+  ;; add two streams
+  (stream-map
+   (lambda (x) (+ (car x) (cdr x)))
+   (stream-zip s1 s2)))
+
+(define (stream-scale s c)
+  ;; scales a numeric stream by a constant
+  (stream-map (lambda (x) (* x c)) s))
+
+(define (sp n s)
+  ;; stream-print: a useful helper to print the first few values of a stream
+  (stream-display (stream-take n s)))
+
+(define (stream-integral integrand initial-value dt)
+  (letrec ([int
+	    (stream-cons initial-value
+			 (stream-add (stream-scale integrand dt)
+				     int))])
+    int))
+
+;;; 3.5.4: Streams and Delayed Evaluation
+;;; streams allow us to model feedback loops
+(define (solve f y0 dt)
+  ;; attempting to solve the differential equation dy/dt=f(y)
+  ;; by iteration of y=int{dy/dt} and dy/dt=f(y)
+  ;; this won't work because y and dy are mutually depentend
+  (letrec* ([y (integral dy y0 dt)]
+	    [dy (stream-map f y)])
+    y))
+
+;;; this will fail
+;; (stream-ref (solve (lambda (y) y) 1 0.001)
+;; 	    1000)
+
+(define (stream-delayed-integral delayed-integrand initial-value dt)
+  ;; redefined integral with delayed integrand; basically wait for dy
+  ;; (the integrand) to be declared before using it
+  (letrec ([int
+	    (stream-cons
+	     initial-value
+	     (let ([integrand (delayed-eval delayed-integrand)])
+	       (stream-add (stream-scale integrand dt)
+			   int)))])
+    int))
+
+(define (solve f y0 dt)
+  ;; redefined solve with delayed integrant
+  (letrec* ([y (stream-delayed-integral (make-delayed dy) y0 dt)]
+	    [dy (stream-map f y)])
+    y))
+
+;;; estimate e
+(stream-ref (solve (lambda (y) y) 1 0.001)
+	    1000)
+
+;;; with this model of "delayed arguments," we now can create systems of
+;;; (interdependent) streams with feedback -- very cool!
+
+;;; the paragraph on normal-order evaluation makes the note that delayed
+;;; evaluation plays poorly with mutability, as we often perform actions
+;;; out of the expected order
+
+;;; 3.5.5: Modularity of Functional Programs and Modularity of Objects
