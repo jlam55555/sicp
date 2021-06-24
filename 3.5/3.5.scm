@@ -146,29 +146,6 @@
   (stream-cons a (fibgen b (+ a b))))
 (define fibs (fibgen 0 1))
 
-(define (stream-zip a b)
-  ;; stream version of zip
-  (if [or (stream-null? a)
-	  (stream-null? b)]
-      *empty-stream*
-      (stream-cons
-       (cons (stream-car a)
-	     (stream-car b))
-       (stream-zip (stream-cdr a)
-		   (stream-cdr b)))))
-
-(define fibs-cooler
-  ;; a cooler stream implementation of fibonacci without any state variables
-  ;; (i.e., composed only of generic stream operations) -- involves "tail chase"
-  ;; inspiration taken from the "A Gentle Introduction to Haskell"
-  (stream-cons
-   0
-   (stream-cons
-    1
-    (stream-map
-     (lambda (x) (+ (car x) (cdr x)))
-     (stream-zip fibs-cooler (stream-cdr fibs-cooler))))))
-
 (define (stream-take-while pred s)
   ;; takes from a stream while predicate is true; another useful stream op
   (if [or (stream-null? s)
@@ -185,7 +162,7 @@
   even?
   (stream-take-while
    (lambda (x) (< x 4000000))
-   fibs-cooler)))
+   fibs)))
 
 (define (sieve s)
   ;; a prime sieve... using streams?!?!?! but it is not actually sieve of
@@ -207,3 +184,183 @@
 
 (stream-display
  (stream-take 50 primes))
+
+;;; the previous streams involved explicit "generating procedures": functions
+;;; to calculate the next element based on the previous one, but we can
+;;; also define infinite streams implicitly; these take advantage of the
+;;; laziness of streams, and my guess is that it'll be very hard to get this
+;;; sort of neat lazy syntax in languages without macros like Java
+
+(define ones-implicit
+  ;; implicit stream generating all ones
+  (stream-cons 1 ones-implicit))
+
+(define integers-implicit
+  ;; implicit version of integers stream
+  (stream-cons 1 (stream-map 1+ integers-implicit)))
+
+(define (stream-zip a b)
+  ;; stream version of zip
+  (if [or (stream-null? a)
+	  (stream-null? b)]
+      *empty-stream*
+      (stream-cons
+       (cons (stream-car a)
+	     (stream-car b))
+       (stream-zip (stream-cdr a)
+		   (stream-cdr b)))))
+
+(define fibs-implicit
+  ;; an implicit definition of the infinite Fibonacci stream; rather than
+  ;; using the generic form of map, we use zip, like they do in
+  ;; "A Gentle Introduction to Haskell"
+  (stream-cons
+   0
+   (stream-cons
+    1
+    (stream-map
+     (lambda (x) (+ (car x) (cdr x)))
+     (stream-zip fibs-implicit (stream-cdr fibs-implicit))))))
+
+;;; we can make a primes stream that filters only based on the previous primes,
+;;; which is more efficient than plain trial division (and thus better than the
+;;; previous prime sieve)
+(define primes-smart
+  ;; this stream uses itself to generate the next element, but not like a simple
+  ;; generating function that only uses the previous output; it uses the entire
+  ;; stream up to sqrt(n)
+  (stream-cons 2 (stream-filter stream-prime? (integers-from 3))))
+
+(define (stream-any? pred s)
+  ;; returns #t if any element of s fulfills the predicate, and #f otherwise;
+  ;; assumed that the stream is finite or contains a positive element
+  (cond ([stream-null? s] #f)
+	([pred (stream-car s)] #t)
+	(#t (stream-any? pred (stream-cdr s)))))
+
+(define (stream-prime? n)
+  ;; helper for the above function; use additional stream primitives rather
+  ;; than manual iteration
+  (let ([sqrtn (sqrt n)])
+    (not (stream-any? (lambda (x) (divides? x n))
+		      (stream-take-while (lambda (x) (<= x sqrtn))
+					 primes-smart)))))
+
+;;; project euler #7: 10001st prime
+;;; not too slow but causes a little delay
+;; (stream-ref primes-smart 10000)
+
+;;; project euler #10: sum of primes under 2 million
+;;; this takes ~3 seconds on the first invocation
+;; (stream-fold-left
+;;  +
+;;  0
+;;  (stream-take-while (lambda (x) (< x 2000000)) primes-smart))
+
+;;; 3.5.3: Exploiting the stream paradigm
+
+;;; returning to the sqrt example by repeated average damping
+(define (sqrt-stream x)
+  ;;; here, successive elements of the stream are successive approximations
+  
+  (define (sqrt-improve guess x)
+    ;; helper function
+    (average guess (/ x guess)))
+  
+  ;; sicp says we cannot do this with let, but this is exactly the use case
+  ;; for letrec
+  (letrec ([guesses (stream-cons
+		     1.0
+		     (stream-map (lambda (guess) (sqrt-improve guess x))
+				 guesses))])
+    guesses))
+
+(stream-display
+ (stream-take 5 (sqrt-stream 5)))
+
+;;; the pi example
+
+;;; another useful helper
+(define (stream-drop s n)
+  ;; drops the first n elements from stream s
+  (if [or (<= n 0)
+	  (stream-null? s)]
+      s
+      (stream-drop (stream-cdr s) (1- n))))
+
+;;; need this from exercise 3.55
+(define (partial-sums s)
+  ;; partial sums of the stream s
+  (letrec ([part-sums (stream-cons
+		       0
+		       (stream-map
+			(lambda (x) (+ (car x) (cdr x)))
+			(stream-zip s part-sums)))])
+    (stream-drop part-sums 1)))
+
+(define (pi-summands n)
+  ;; successive elements of the stream are successive summands
+  ;; defined with a "generator" syntax
+  (stream-cons (/ 1.0 n)
+	       (stream-map - (pi-summands (+ n 2)))))
+
+(define pi-stream
+  ;; successive elements in pi-stream are again successive approximations
+  (stream-map (lambda (x) (* x 4))
+	      (partial-sums (pi-summands 1))))
+
+(stream-display
+ (stream-take 20 pi-stream))
+
+;;; "sequence accelerators" by Euler transform
+(define (euler-transform s)
+  ;; if s is the sequence of partial sums of an alternating sequence (with terms
+  ;; monotonically in magnitude), then we can accelerate it with this transform
+  (let ([s0 (stream-ref s 0)]
+	[s1 (stream-ref s 1)]
+	[s2 (stream-ref s 2)])
+    (stream-cons (- s2 (/ (square (- s2 s1))
+			  (+ s0 (* -2 s1) s2)))
+		 (euler-transform (stream-cdr s)))))
+
+(stream-display
+ (stream-take 20 (euler-transform pi-stream)))
+
+(define (make-tableau transform s)
+  ;; a tableau is a stream of streams
+  (stream-cons s
+	       (make-tableau transform
+			     (transform s))))
+
+(define (accelerated-sequence transform s)
+  ;; get the first element of each stream in the tableau
+  (stream-map stream-car (make-tableau transform s)))
+
+;;; this actually gives us nan's after only 10 terms because of limited
+;;; precision
+(stream-display
+ (stream-take 20 (accelerated-sequence euler-transform pi-stream)))
+
+;;; (infinite) streams of pairs of infinite streams
+;;; think of it like a Cartesian product of infinite sets
+;;; note that we have to be careful about the order in which we choose pairs
+;;; because of the infiniteness
+
+(define (sequence-cartesian-product s t)
+  ;; takes the cartesian product of two sequences
+  (stream-cons
+   (cons (stream-car s) (stream-car t))
+   (stream-interleave
+    (stream-map (lambda (x) (cons (stream-car s) x))
+		(stream-cdr t))
+    (sequence-cartesian-product (stream-cdr s) (stream-cdr t)))))
+
+(define (stream-interleave s1 s2)
+  ;; interleaves two sequences; useful for joining infinite streams in a way
+  ;; such that values from both streams will be incorporated in a finite
+  ;; amount of time
+  (if [stream-null? s1]
+      s2
+      (stream-cons (stream-car s1)
+		   (stream-interleave s2 (stream-cdr s1)))))
+
