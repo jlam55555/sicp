@@ -433,3 +433,13 @@
 ;;; out of the expected order
 
 ;;; 3.5.5: Modularity of Functional Programs and Modularity of Objects
+
+;;; This section reproduces the monte-carlo cesaro estimate of pi using
+;;; streams of random numbers, which avoid assignment. We can think of a stream
+;;; as an object's state over time, and create a new state rather than
+;;; overwriting the old one. Streams make it easier to retain the idea of
+;;; pure mathematical functions.
+
+;;; The book mentions that the merging operation is problematic with streams:
+;;; we need to decide on an order to which to merge things, which is similar
+;;; to the concurrency issue with separate objects.
