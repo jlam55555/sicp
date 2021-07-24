@@ -201,7 +201,7 @@
   ;; gets the first expression from a list of expressions
   (car seq))
 
-(define (mi::rest-seq seq)
+(define (mi::rest-exps seq)
   ;; gets the rest of the expressions from a list of expression
   (cdr seq))
 
@@ -277,7 +277,7 @@
 
 (define (mi::expand-clauses clauses)
   ;; expand the clauses of a `cond` expression into equivalent `if` expressions
-  (if [null? clause]
+  (if [null? clauses]
       #f				; no else clause
       (let ([first (car clauses)]
 	    [rest (cdr clauses)])
@@ -286,7 +286,7 @@
 		(mi::seq->exp (mi::cond-actions first))
 		(error 'mi::expand-clauses "else clause isn't last" clauses))
 	    (mi::make-if (mi::cond-predicate first)
-			 (mi::seq->exp (mi::cond-predicate first))
+			 (mi::seq->exp (mi::cond-actions first))
 			 (mi::expand-clauses rest))))))
 
 ;;; 4.1.3: Evaluator Data Structures
@@ -457,6 +457,9 @@
 	(list 'cons cons)
 	(list 'null? null?)
 	(list '+ +)
+	(list '- -)
+	(list '* *)
+	(list '/ /)
 	(list '= =)
 	;; can add more primitives here
 	))

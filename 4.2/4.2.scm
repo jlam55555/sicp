@@ -16,7 +16,8 @@
 
 ;;; 4.2.2: An Interpreter with Lazy Evaluation
 ;;; note: I use `eval-force` rather than `actual-value`, don't think the latter
-;;; name is as indicative
+;;; name is as indicative; also note that this overwrites the analyze part
+;;; from the previous section; not sure if lazy evaluation makes it hard
 
 (define (mi::eval exp env)
   ;; updated eval with lazy evaluation
@@ -65,8 +66,8 @@
 	  (mi::procedure-body procedure)
 	  (mi::extend-environment
 	   (mi::procedure-parameters procedure)
-	   (mi::list-of-delayed-values arguments env)
-	   (mi::procedure-environment procedure)))) ; new
+	   (mi::list-of-delayed-values arguments env) ; new
+	   (mi::procedure-environment procedure))))
 	(#t
 	 (error 'mi::apply "unknown procedure type" procedure))))
 
@@ -90,7 +91,7 @@
   ;; updated prompt that forces the result
   (mi::prompt-for-input mi::*input-prompt*)
   (let* ([input (read)]
-	 [output (mi::eval input mi::*global-environment*)])
+	 [output (mi::eval-force input mi::*global-environment*)])
     (mi::announce-output mi::*output-prompt*)
     (mi::user-print output))
   (mi::driver-loop))
@@ -145,3 +146,50 @@
 	([mi::evaluated-thunk? obj]
 	 (mi::thunk-value obj))
 	(#t obj)))
+
+;;; 4.2.3: Streams as Lazy Lists
+;;; we can simply input the procedural definitions into the evaluator
+;;; these overwrite the primitives (we can remove them from the primitives list)
+
+(mi::eval-sequence
+ '((define (cons x y)
+     (lambda (m) (m x y)))
+   (define (car z)
+     (z (lambda (p q) p)))
+   (define (cdr z)
+     (z (lambda (p q) q)))
+   (define (list-ref items n)
+     (if [= n 0]
+	 (car items)
+	 (list-ref (cdr items) (- n 1))))
+   (define (map proc items)
+     (if [null? items]
+	 '()
+	 (cons (proc (car items))
+	       (map proc (cdr items)))))
+   (define (scale-list items factor)
+     (map (lambda (x) (* x factor)) items))
+   (define (add-lists list1 list2)
+     (cond ([null? list1] list2)
+	   ([null? list2] list1)
+	   (true (cons (+ (car list1) (car list2))
+		     (add-lists (cdr list1) (cdr list2))))))
+   (define ones (cons 1 ones))
+   (define integers (cons 1 (add-lists ones integers))))
+ mi::*global-environment*)
+
+;;; lazy lists for the differential equation solver
+(mi::eval-sequence
+ '((define (integral integrand initial-value dt)
+     (define int
+       (cons initial-value
+             (add-lists (scale-list integrand dt)
+			int)))
+     int)
+   (define (solve f y0 dt)
+     (define y (integral dy y0 dt))
+     (define dy (map f y))
+     y)
+   (define e-approx
+     (list-ref (solve (lambda (x) x) 1 0.001) 1000)))
+ mi::*global-environment*)
