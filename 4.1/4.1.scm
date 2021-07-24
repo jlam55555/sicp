@@ -27,15 +27,15 @@
 	 (mi::eval-if exp env))
 	([mi::lambda? exp]
 	 (mi::make-procedure (mi::lambda-parameters exp)
-			    (mi::lambda-body exp)
-			    env))
+			     (mi::lambda-body exp)
+			     env))
 	([mi::begin? exp]
 	 (mi::eval-sequence (mi::begin-actions exp) env))
 	([mi::cond? exp]
 	 (mi::eval (mi::cond->if exp) env))
 	([mi::application? exp]
 	 (mi::apply (mi::eval (mi::operator exp) env)
-		   (mi::list-of-values (mi::operands exp) env)))
+		    (mi::list-of-values (mi::operands exp) env)))
 	(else
 	 (error 'mi::eval "unknown expression type" exp))))
 
@@ -58,8 +58,8 @@
 (define (mi::eval-if exp env)
   ;; evals an `if` expression with proper control flow
   (if [mi::true? (mi::eval (mi::if-predicate exp) env)]
-      (mi::eval (mi::if-consequent exps) env)
-      (mi::eval (mi::if-alternative exps) env)))
+      (mi::eval (mi::if-consequent exp) env)
+      (mi::eval (mi::if-alternative exp) env)))
 
 (define (mi::eval-sequence exps env)
   ;; evaluates a sequence of expressions in the containing scope
@@ -104,6 +104,10 @@
   ;; literal quotation mark (') gets expanded automatically before the
   ;; interpreter interprets it
   (mi::tagged-list? exp 'quote))
+
+(define (mi::text-of-quotation exp)
+  ;; extract quoted text
+  (cadr exp))
 
 (define (mi::tagged-list? exp tag)
   ;; check if the first element of a syntax list is the tag
@@ -373,4 +377,251 @@
   ;; lookup a symbol in the environment, starting from the current frame and
   ;; moving upwards in the stack, until the variable is found or the empty
   ;; environment is reached
-  'todo)
+  (define (env-loop env)
+    (define (scan vars vals)
+      (cond ([null? vars]
+	     (env-loop (mi::enclosing-environment env)))
+	    ([eq? var (car vars)]
+	     (car vals))
+	    (#t
+	     (scan (cdr vars) (cdr vals)))))
+    (if [eq? env mi::*empty-environment*]
+	(error 'mi::lookup-variable-value "unbound variable" var)
+	(let ([frame (mi::first-frame env)])
+	  (scan (mi::frame-variables frame)
+		(mi::frame-values frame)))))
+  (env-loop env))
+
+(define (mi::set-variable-value! var val env)
+  ;; sets the value of a symbol in the environment if found; if not
+  ;; found, error
+  (define (env-loop env)
+    (define (scan vars vals)
+      (cond ([null? vars]
+	     (env-loop (mi::enclosing-environment env)))
+	    ([eq? var (car vars)]
+	     (set-car! vals val))
+	    (#t
+	     (scan (cdr vars) (cdr vals)))))
+    (if [eq? env mi::*empty-environment*]
+	(error 'mi::set-variable-value! "unbound variable" var)
+	(let ([frame (mi::first-frame env)])
+	  (scan (mi::frame-variables frame)
+		(mi::frame-values frame)))))
+  (env-loop env))
+
+(define (mi::define-variable! var val env)
+  ;; define a variable: change the binding if it exists in the first frame;
+  ;; if not found, create a new binding (in the first frame)
+  (let ([frame (mi::first-frame env)])
+    (define (scan vars vals)
+      (cond ([null? vars]
+	     (mi::add-binding-to-frame! var val frame))
+	    ([eq? var (car vals)]
+	     (set-car! vals val))
+	    (#t
+	     (scan (cdr vars) (cdr vals)))))
+    (scan (mi::frame-variables frame)
+	  (mi::frame-values frame))))
+
+;;; possible extensions from the exercises: change the way the frames are
+;;; implemented (an even better way is to use the hashtable implementation in
+;;; the standard library); and create a function to unbind a variable
+
+;;; 4.1.4: Running the Evaluator as a Program
+
+(define (mi::setup-environment)
+  ;; a thunk to be called to set up the global environment with primitive
+  ;; functions (functions that are not defined by the user)
+  (let ([initial-env
+	 (mi::extend-environment
+	  (mi::*primitive-procedure-names*)
+	  (mi::*primitive-procedure-objects*)
+	  mi::*empty-environment*)])
+    (mi::define-variable! 'true #t initial-env)
+    (mi::define-variable! 'false #f initial-env)
+    initial-env))
+
+(define (mi::primitive-procedure? proc)
+  ;; check if a function is a primitive procedure
+  (mi::tagged-list? proc 'primitive))
+
+(define (mi::primitive-implementation proc)
+  ;; extract the implementation of a primitive procedure
+  (cadr proc))
+
+(define mi::*primitive-procedures*
+  ;; list of primitive procedures and their implementations
+  (list (list 'car car)
+	(list 'cdr cdr)
+	(list 'cons cons)
+	(list 'null? null?)
+	(list '+ +)
+	;; can add more primitives here
+	))
+
+(define (mi::*primitive-procedure-names*)
+  ;; list of the names of the primitive procedures
+  (map car mi::*primitive-procedures*))
+
+(define (mi::*primitive-procedure-objects*)
+  ;; list of the values of the primitive procedures
+  (map (lambda (proc) (list 'primitive (cadr proc)))
+       mi::*primitive-procedures*))
+
+(define (mi::apply-primitive-procedure proc args)
+  ;; apply a primitive procedure; note that here we use the builtin `apply`
+  ;; method to run the primitives
+  (apply (mi::primitive-implementation proc) args))
+
+(define mi::*input-prompt*
+  ;; repl input prompt
+  ";;; M-Eval input: ")
+
+(define mi::*output-prompt*
+  ;; repl output prompt
+  ";;; M-Eval output: ")
+
+(define (mi::driver-loop)
+  ;; repl loop
+  (mi::prompt-for-input mi::*input-prompt*)
+  (let ([input (read)])
+    (let ([output (mi::eval input mi::*global-environment*)])
+      (mi::announce-output mi::*output-prompt*)
+      (mi::user-print output)))
+  (mi::driver-loop))
+
+(define (mi::prompt-for-input string)
+  ;; show repl input prompt
+  (format #t "\n\n~a\n" string))
+
+(define (mi::announce-output string)
+  ;; show repl output prompt
+  (format #t "\n~a\n" string))
+
+(define (mi::user-print object)
+  ;; show eval output to user
+  (if [mi::compound-procedure? object]
+      (display (list 'compound-procedure
+		     (mi::procedure-parameters object)
+		     (mi::procedure-body object)
+		     '<procedure-env>))
+      (display object)))
+
+(define mi::*global-environment*
+  ;; set up the global environment
+  (mi::setup-environment))
+
+;;; 4.1.7. Separating Syntactic Analsys from Execution
+;;; We can compile our code to an intermediate form during analysis and prevent
+;;; code from being analyzed each time it is executed.
+
+(define (mi::eval exp env)
+  ;; rewriting eval to only parse the expression once
+  ((mi::analyze exp) env))
+
+(define (mi::analyze exp)
+  ;; code analysis only happens once
+  (cond ([mi::self-evaluating? exp]
+	 (mi::analyze-self-evaluating exp))
+	([mi::quoted? exp]
+	 (mi::analyze-quoted exp))
+	([mi::variable? exp]
+	 (mi::analyze-variable exp))
+	([mi::assignment? exp]
+	 (mi::analyze-assignment exp))
+	([mi::definition? exp]
+	 (mi::analyze-definition exp))
+	([mi::if? exp]
+	 (mi::analyze-if exp))
+	([mi::lambda? exp]
+	 (mi::analyze-lambda exp))
+	([mi::begin? exp]
+	 (mi::analyze-sequence (mi::begin-actions exp)))
+	([mi::cond? exp]
+	 (mi::analyze (mi::cond->if exp)))
+	([mi::application? exp]
+	 (mi::analyze-application exp))
+	(#t
+	 (error 'mi::analyze "unknown expression type" exp))))
+
+(define (mi::analyze-self-evaluating exp)
+  ;; syntactic analysis of a self-evaluating expression
+  (lambda (env) exp))
+
+(define (mi::analyze-quoted exp)
+  ;; syntactic analysis of a quoted expression
+  (let ([qval (mi::text-of-quotation exp)])
+    (lambda (env) qval)))
+
+(define (mi::analyze-variable exp)
+  ;; syntactic analysis of a variable
+  (lambda (env) (mi::lookup-variable-value exp env)))
+
+(define (mi::analyze-assignment exp)
+  ;; syntactic analysis of an assignment expression
+  (let ([var (mi::assignment-variable exp)]
+	[vproc (mi::analyze (mi::assignment-value exp))])
+    (lambda (env)
+      (mi::set-variable-value! var (vproc env) exp)
+      'ok)))
+
+(define (mi::analyze-definition exp)
+  ;; syntactic analysis of a definition expression
+  (let ([var (mi::definition-variable exp)]
+	[vproc (mi::analyze (mi::definition-value exp))])
+    (lambda (env)
+      (mi::define-variable! var (vproc env) env)
+      'ok)))
+
+(define (mi::analyze-if exp)
+  ;; syntactic analysis of an if expression
+  (let ([pproc (mi::analyze (mi::if-predicate exp))]
+	[cproc (mi::analyze (mi::if-consequent exp))]
+	[aproc (mi::analyze (mi::if-alternative exp))])
+    (lambda (env)
+      (if (mi::true? (pproc env))
+	  (cproc env)
+	  (aproc env)))))
+
+(define (mi::analyze-lambda exp)
+  ;; syntactic analysis of a lambda expression
+  (let ([vars (mi::lambda-parameters exp)]
+	[bproc (mi::analyze-sequence (mi::lambda-body exp))])
+    (lambda (env) (mi::make-procedure vars bproc env))))
+
+(define (mi::analyze-sequence exps)
+  ;; syntactic analysis of a sequence of expressions
+  (define (sequentially proc1 proc2)
+    (lambda (env) (proc1 env) (proc2 env)))
+  (define (loop first-proc rest-procs)
+    (if [null? rest-procs]
+	first-proc
+	(loop (sequentially first-proc (car rest-procs))
+	      (cdr rest-procs))))
+  (let ([procs (map mi::analyze exps)])
+    (if [null? procs]
+	(error 'mi::analyze-sequence "empty sequence"))
+    (loop (car procs) (cdr procs))))
+
+(define (mi::analyze-application exp)
+  ;; syntactic analysis of a function application
+  (let ([fproc (mi::analyze (mi::operator exp))]
+	(aprocs (map mi::analyze (mi::operands exp))))
+    (lambda (env)
+      (mi::execute-application (fproc env)
+			       (map (lambda (aproc) (aproc env))
+				    aprocs)))))
+
+(define (mi::execute-application proc args)
+  ;; execution of an analyzed expression
+  (cond ([mi::primitive-procedure? proc]
+	 (mi::apply-primitive-procedure proc args))
+	([mi::compound-procedure? proc]
+	 ((mi::procedure-body proc)
+	  (mi::extend-environment
+	   (mi::procedure-parameters proc)
+	   args
+	   (mi::procedure-environment proc))))
+	(#t
+	 (error 'mi::execute-application "unknown procedure type" proc))))

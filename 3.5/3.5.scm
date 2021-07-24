@@ -121,7 +121,7 @@
 
 (define (stream-take n s)
   ;; take the first n elements of the stream
-  (if [zero? n]
+  (if [or (stream-null? s) (zero? n)]
       *empty-stream*
       (stream-cons (stream-car s)
 		   (stream-take (1- n) (stream-cdr s)))))
