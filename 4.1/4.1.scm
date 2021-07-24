@@ -457,6 +457,7 @@
 	(list 'cons cons)
 	(list 'null? null?)
 	(list '+ +)
+	(list '= =)
 	;; can add more primitives here
 	))
 
