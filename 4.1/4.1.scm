@@ -178,8 +178,9 @@
   ;; extract alternative from an `if` statement, else `#f`, just like an
   ;; `and` expression (Chez Scheme implements it differently, returning the
   ;; `(void)` value if the alternative branch is missing)
-  (and (not (null? (cdddr exp)))
-       (cadddr exp)))
+  (if (not (null? (cdddr exp)))
+      (cadddr exp)
+      'false))
 
 (define (mi::make-if predicate consequent alternative)
   ;; constructor for an `if` expression, to be used by `cond->if`
@@ -456,6 +457,8 @@
 	(list 'cdr cdr)
 	(list 'cons cons)
 	(list 'null? null?)
+	(list 'not not)
+	(list '< <)
 	(list '+ +)
 	(list '- -)
 	(list '* *)
