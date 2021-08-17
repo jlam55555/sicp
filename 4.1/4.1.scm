@@ -464,6 +464,7 @@
 	(list '* *)
 	(list '/ /)
 	(list '= =)
+	(list 'display display)
 	;; can add more primitives here
 	))
 

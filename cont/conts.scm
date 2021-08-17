@@ -20,11 +20,6 @@
   ;; following the convention stated above
   (car ccs))
 
-;;; TODO: remove this
-;; (define mi::main-cc
-;;   (trace-lambda mi::main-cc (ccs)
-;;     (car ccs)))
-
 (define (mi::error-cc ccs)
   ;; following the convention stated above; checks that there is a second
   ;; continuation
@@ -60,8 +55,8 @@
 	     (cons
 	      (lambda (pred-value)
 		(if [mi::true? pred-value]
-		    (cproc env (mi::main-cc ccs))
-		    (aproc env (mi::main-cc ccs))))
+		    (cproc env ccs)
+		    (aproc env ccs)))
 	      (cdr ccs))))))
 
 (define (mi::analyze-sequence exps)
@@ -166,9 +161,19 @@
     (mi::conts-eval input
 		    mi::*global-environment*
 		    (list
+		     ;; default main continuations
 		     (lambda (val)
 		       (mi::user-print val)
+		       (mi::driver-loop))
+		     ;; default error continuation
+		     (lambda (val)
+		       (mi::error-print val)
 		       (mi::driver-loop))))))
+
+(define (mi::error-print object)
+  ;; show eval output to user
+  (format #t "error: top-level error continuation called with irritant ")
+  (mi::user-print object))
 
 ;;; FINISHED MULTI CONTINUATION EXAMPLE
 
@@ -198,54 +203,56 @@
 	([mi::cond? exp]
 	 (mi::analyze (mi::cond->if exp)))
 
-	;; same as before
-	([mi::call/cc? exp]
-	 (mi::analyze-call/cc exp))
+	;; multiple continuations scenario; generalization of call/cc
+	([mi::call/ccs? exp]
+	 (mi::analyze-call/ccs exp))
 	
 	([mi::application? exp]
 	 (mi::analyze-application exp))
 	(#t
 	 (error 'mi::analyze "unknown expression type" exp))))
 
-(define (mi::call/cc? exp)
-  ;; whether exp is a call/cc expression
-  (mi::tagged-list? exp 'call/cc))
+;;; implementing call/ccs
+(define (mi::call/ccs? exp)
+  (mi::tagged-list? exp 'call/ccs))
 
-(define (mi::call/cc-arg exp)
-  ;; get argument of call/cc (should be the second and last subexpression
-  ;; of `exp`)
+(define (mi::call/ccs-arg exp)
   (cadr exp))
 
-;;; What we want to achieve (CPS form):
-;; (call/cc f ret)
-;;      =>
-;; (define (call/cc f ret)
-;;   (f (lambda (x _) (ret x)) ret))
-;;   
-;;; Same without CPS form (note that ret comes from the interpreter and is not
-;;; usually exposed):
-;; (call/cc f)
-;;      =>
-;; (define (call/cc f)
-;;   (f ret))
-
-(define (mi::analyze-call/cc exp)
+(define (mi::analyze-call/ccs exp)
   ;; for (call/cc f), call f, binding the continuation as a primitive
   ;; procedure to the argument of f
-  (let ([fproc (mi::analyze (mi::call/cc-arg exp))])
+  (let ([fproc (mi::analyze (mi::call/ccs-arg exp))])
     (lambda (env ccs)
       (fproc env
 	     (cons
 	      (lambda (proc)
 		(mi::execute-application
 		 proc
-		 (list (list 'primitive (mi::main-cc ccs)))
+		 (list
+		  (map (lambda (cc) (list 'primitive cc)) ccs))
 		 ccs))
 	      (cdr ccs))))))
 
-;;; TODO: examples of call/cc
-;; (call/cc (lambda (r1) (call/cc (lambda (r2) (r1 (r2 (r1 3)))))))
-;; (+ 2 (call/cc (lambda (ret) (ret 4) 5)))
-;; (+ 2 (call/cc (lambda (ret) 5)))
+;;; TODO: examples of all functions
+;;; TODO: allow setting multiple continuations
 
-;;; TODO: multiple continuations (optional error continuation)
+(define (mi::eval-test exp)
+  ;; for testing use
+  (mi::conts-eval
+   exp
+   mi::*global-environment*
+   (list
+    (lambda (x) '())
+    (lambda (x) '()))))
+
+;;; write call/cc (base case) in terms of more general case (call/ccs)
+(mi::eval-test
+ '(define (call/cc f)
+    (call/ccs (lambda (ccs)
+		(f (car ccs))))))
+
+;;; TODO: what is the intended behavior with multiple return calls?
+;;; i.e., if there is a continuation that is not a tail-call?
+;; (mi::eval-test
+;;  '(display (+ 2 (call/cc (lambda (cc) (cc 4) 5)))))
