@@ -317,6 +317,9 @@
     (lambda (x) '())
     (lambda (x) '()))))
 
+(define (mi::eval-sequence exps)
+  (for-each mi::eval exps))
+
 ;;; write call/cc (base case) in terms of more general case (call/ccs)
 (mi::eval
  '(define (call/cc f)
@@ -325,5 +328,66 @@
 
 ;;; TODO: what is the intended behavior with multiple return calls?
 ;;; i.e., if there is a continuation that is not a tail-call?
-;; (mi::eval-test
+;; (mi::eval
 ;;  '(display (+ 2 (call/cc (lambda (cc) (cc 4) 5)))))
+
+;;; example: try/catch
+(mi::eval-sequence
+ '((define (try/catch try catch)
+     ;; try is a thunk, catch takes the error value as input and returns a value
+     (call/new-ccs
+      (lambda (ccs)
+	(cons (car ccs)
+	      (cons catch
+		    (cdr (cdr ccs)))))
+      (try)))
+   (define (throw val)
+     (call/ccs
+      (lambda (ccs)
+	((car (cdr ccs)) val))))
+   (define (my-/ x y)
+     (if [= y 0]
+	 (throw "my-/: /0")
+	 (/ x y)))))
+
+;;; sample try/catch behavior
+;;; (compare this to if it weren't in the try/catch, and if the try block
+;;; doesn't throw an error)
+;; (try/catch
+;;  (lambda () (my-/ 3 0))
+;;  (lambda (val) "got error in catch"))
+
+;;; another example, but with nested try/catch and sequences
+;; (try/catch
+;;  (lambda ()
+;;    (my-/ 1 1)
+;;    (try/catch
+;;     (lambda ()
+;;       (my-/ 1 0))
+;;     (lambda (err) "inner error"))
+;;    (my-/ 1 1))
+;;  (lambda (err) "outer error"))
+
+;;; other error control flows that can be implemented in this framework:
+;;; `try/catch-finally`
+;;; `call/nth-cc` -> `call/cc` = `call/main-cc`, `call/error-cc`
+;;; `call/new-nth-cc` -> `call/new-main-cc`, `call/new-error-cc`
+;;; `lambda/new-nth-cc` -> `lambda/new-main-cc`, `lambda/new-error-cc`
+
+;;; note: `call/new-ccs` is extremely powerful and dangerous -- I think?
+;;; have to come up with some disastrous scenarios
+
+;;; think about:
+;;; - relationship to monads
+;;; - relationship to callbacks
+;;; - relationship to CPS (how much of this is just CPS?)
+;;; - relationship to concurrency/threads
+;;; - relationship to coroutines and generators
+;;; - relationship to communicating sequential processes (CPS and CSP)
+;;; - other possible use cases for multiple continuations
+;;; - multiple returns (non-tail recursive) -- what is desired behavior?
+;;; - compiler IR and optimized tail calls (function calls become goto)
+;;; - continuation vs. processes OS-level scheduling
+;;; - efficient implementation with infinite extent
+;;; - why do most programming languages not have this? How practical is this?
+;;; - asynchronous programming (e.g., promises, fetch) -- requires threads
