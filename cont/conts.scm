@@ -178,9 +178,9 @@
 ;;; FINISHED MULTI CONTINUATION EXAMPLE
 
 ;;; add new operators:
-;;; - `(call/cc f)`         regular, provides (main) continuation
-;;; - `(call/ccs f)`        provides list of continuations
-;;; - `(call/new-ccs ccs f)`      allows you to set custom ccs
+;;; - `(call/cc f)`             regular, provides (main) continuation
+;;; - `(call/ccs f)`            provides list of all current continuations
+;;; - `(call/new-ccs f exp)`    allows you to set custom ccs
 
 (define (mi::analyze exp)
   ;; add call/cc clause
@@ -206,13 +206,17 @@
 	;; multiple continuations scenario; generalization of call/cc
 	([mi::call/ccs? exp]
 	 (mi::analyze-call/ccs exp))
+
+	;; allows you to set auxiliary continuations
+	([mi::call/new-ccs? exp]
+	 (mi::analyze-call/new-ccs exp))
 	
 	([mi::application? exp]
 	 (mi::analyze-application exp))
 	(#t
 	 (error 'mi::analyze "unknown expression type" exp))))
 
-;;; implementing call/ccs
+;;; implementing `call/ccs`
 (define (mi::call/ccs? exp)
   (mi::tagged-list? exp 'call/ccs))
 
@@ -234,11 +238,78 @@
 		 ccs))
 	      (cdr ccs))))))
 
+;;; implementing `call/new-ccs`
+;;; sample usage:
+;; (call/new-ccs
+;;  ;; set an error continuation
+;;  (lambda (ccs)
+;;    (list
+;;     (lambda (val)
+;;       (display "custom error continuation"))))
+;;  ;; expression to call with that continuation
+;;  (+ 2 (call/ccs
+;;        (lambda (ccs)
+;; 	 ;; call the error continuation
+;; 	 ((car (cdr ccs)) 4)))))
+
+(define (mi::call/new-ccs? exp)
+  (mi::tagged-list? exp 'call/new-ccs))
+
+(define (mi::call/new-ccs-generator exp)
+  (cadr exp))
+
+(define (mi::call/new-ccs-body exp)
+  (caddr exp))
+
+;; (define (mi::analyze-call/new-ccs exp)
+;;   (let ([fproc (mi::analyze (mi::call/new-ccs-arg exp))]
+;; 	[body (mi::analyze (mi::call/new-ccs-body exp))])
+;;     (lambda (env ccs)
+;;       (fproc env
+;; 	     (cons
+;; 	      (lambda (proc)
+;; 		(mi::execute-application
+;; 		 proc
+;; 		 (list
+;; 		  (map (lambda (cc) (list 'primitive cc)) ccs))
+;; 		 ccs))
+;; 	      (cdr ccs))))))
+
+(define (mi::analyze-call/new-ccs exp)
+  (let ([fproc (mi::analyze (mi::call/new-ccs-generator exp))]
+	[body (mi::analyze (mi::call/new-ccs-body exp))])
+    (lambda (env ccs)
+      (fproc env
+	     (cons
+	      (lambda (proc)
+		(mi::execute-application
+		 proc
+		 (list
+		  (map (lambda (cc) (list 'primitive cc)) ccs))
+		 (cons
+		  (lambda (new-ccs)
+		    ;; (inspect new-ccs)
+		    ;; (inspect body)
+		    ;; no safety checks!!!
+		    ;; run the body with the user-supplied ccs; need to map
+		    ;; them to regular functions
+		    (body env
+			  (map
+			   (lambda (cc)
+			     (lambda (val)
+			       ;; TODO: working here
+			       (mi::execute-application
+				cc
+				(list val)
+				ccs)))
+			   new-ccs)))
+		  (cdr ccs))))
+	      (cdr ccs))))))
+
 ;;; TODO: examples of all functions
 ;;; TODO: allow setting multiple continuations
 
-(define (mi::eval-test exp)
-  ;; for testing use
+(define (mi::eval exp)
   (mi::conts-eval
    exp
    mi::*global-environment*
@@ -247,7 +318,7 @@
     (lambda (x) '()))))
 
 ;;; write call/cc (base case) in terms of more general case (call/ccs)
-(mi::eval-test
+(mi::eval
  '(define (call/cc f)
     (call/ccs (lambda (ccs)
 		(f (car ccs))))))
