@@ -465,6 +465,9 @@
 	(list '/ /)
 	(list '= =)
 	(list 'display display)
+	(list 'void void)
+	(list 'not not)
+	(list 'pair? pair?)
 	;; can add more primitives here
 	))
 

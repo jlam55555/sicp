@@ -210,11 +210,33 @@
 	;; allows you to set auxiliary continuations
 	([mi::call/new-ccs? exp]
 	 (mi::analyze-call/new-ccs exp))
+
+	;; necessary later for `current-continuation` idiom
+	([mi::procedure?? exp]
+	 (mi::analyze-procedure? exp))
 	
 	([mi::application? exp]
 	 (mi::analyze-application exp))
 	(#t
 	 (error 'mi::analyze "unknown expression type" exp))))
+
+;;; implementing `procedure?`
+(define (mi::procedure?? exp)
+  (mi::tagged-list? exp 'procedure?))
+
+(define (mi::procedure?-arg exp)
+  (cadr exp))
+
+(define (mi::analyze-procedure? exp)
+  (let ([fproc (mi::analyze (mi::procedure?-arg exp))])
+    (lambda (env ccs)
+      (fproc env
+	     (cons
+	      (lambda (f)
+		((mi::main-cc ccs)
+		 (or (mi::primitive-procedure? f)
+		     (mi::compound-procedure? f))))
+	      (cdr ccs))))))
 
 ;;; implementing `call/ccs`
 (define (mi::call/ccs? exp)
@@ -391,3 +413,56 @@
 ;;; - efficient implementation with infinite extent
 ;;; - why do most programming languages not have this? How practical is this?
 ;;; - asynchronous programming (e.g., promises, fetch) -- requires threads
+;;; - continuation is like a function call that never returns
+
+;;; (an attempt at a) generators example, following Matt Might's example
+
+;; (for i in iterator body ...)
+;;; in our case (without syntactic transformations):
+;; (for-generator iterator body-thunk)
+
+(mi::eval-sequence
+ '((define (current-continuation)
+     (call/cc (lambda (cc) (cc cc))))
+
+   (define (tree-iterator tree)
+     (lambda (yield)
+       (define (walk tree)
+	 (if [not (pair? tree)]
+	     (yield tree)
+	     (begin
+	       (walk (car tree))
+	       (walk (cdr tree)))))
+       (walk tree)))
+
+   (define (make-yield for-cc)
+     (lambda (value)
+       ;; `yield` implementation
+       (define cc (current-continuation))
+       (if [procedure? cc]
+	   ;; when called from generator, return to for loop continuation
+	   (for-cc (cons cc value))
+	   ;; when called from for loop, return to generator continuation
+	   (void))))
+
+   (define (for-generator iterator body)
+     (define (loop iterator-cont)
+       (define cc (current-continuation))
+       (if [procedure? cc]
+	   ;; get next value using the generator continuation, if any
+	   (if iterator-cont
+	       (iterator-cont (void))
+	       (iterator (make-yield cc)))
+	   ;; value handler: receive new value and continuation, then loop
+	   [begin
+	     (body (cdr cc))		; next generator value
+	     (loop (car cc))]))		; next generator continuation
+     ;; begin iterator loop with no iterator continuation
+     (loop false))
+
+   (define (println val)
+     (display val)
+     (display "\n"))))
+
+;;; can try the following
+;; (for-generator (tree-iterator (cons 3 (cons (cons 4 5) 6))) println)
