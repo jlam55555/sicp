@@ -364,10 +364,12 @@
 		    (cdr (cdr ccs)))))
       (try)))
    (define (throw val)
+     ;; calls the second (error) continuation
      (call/ccs
       (lambda (ccs)
 	((car (cdr ccs)) val))))
    (define (my-/ x y)
+     ;; modified version of `/` that calls the second continuation on error
      (if [= y 0]
 	 (throw "my-/: /0")
 	 (/ x y)))))
@@ -428,6 +430,7 @@
    (define (tree-iterator tree)
      (lambda (yield)
        (define (walk tree)
+	 (display "In tree-iterator\n")
 	 (if [not (pair? tree)]
 	     (yield tree)
 	     (begin
@@ -448,6 +451,7 @@
    (define (for-generator iterator body)
      (define (loop iterator-cont)
        (define cc (current-continuation))
+       (display "In for loop\n")
        (if [procedure? cc]
 	   ;; get next value using the generator continuation, if any
 	   (if iterator-cont
