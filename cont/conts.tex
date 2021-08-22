@@ -1,0 +1,290 @@
+\documentclass[]{article}
+
+\usepackage{minted}
+\usepackage{hyperref}
+
+\begin{document}
+\title{Variation on a Scheme:\\Multiple implicit first-class continuations}
+\author{Jonathan Lam}
+\date{\today{}}
+
+\maketitle{}
+
+\section{Introduction}
+\label{sec:intr}
+
+This is for the completion of ECE491: Structure and Implementation of Computer Programs, based on the text of the same name by Abelson and Sussman. The assignment was to implement a variation on the interpreter presented in sections 4.1-4.4.
+
+This work extends the work presented in section 4.3: ``Variations on a Scheme -- Nondeterministic Computing.'' The section uses implicit continuations to implement the \mintinline{scheme}|amb| keyword. This work extends that in two ways by:
+\begin{itemize}
+\item providing an arbitrary number of continuations, rather than only two (success and fail); and
+\item exposing continuations as first-class objects using the \mintinline{scheme}|call/cc| interface
+\end{itemize}
+
+Additionally, a significant portion of this project was dedicated to exploring the theory and use cases of continuations, so there will be some backgrounds and examples of common use cases.
+
+\section{Background}
+\label{sec:back}
+
+This sections goes far beyond the scope of the implementation. However, I have yet to find a resource that shows the breadth of the many facets of continuations, so I will attempt to highlight why continuations are so general here. Many of the interesting examples and intuition come from Matt Might's excellent blog posts about continuations, coroutines, and CSP. TODO: cite these
+
+\subsection{What are continuations?}
+\label{sec:what}
+
+TODO
+
+\subsubsection{Continuation-passing style (CPS)}
+\label{sec:cps}
+
+Continuation-passing style is a very instructive tool for discussing continuations at a functional level.
+
+First-class continuations can be implemented in any language with lambdas (functions with lexical closures), by performing a syntactical transfomation of functions to CPS, which is shown in Figure \ref{fig:cps}. Looking at the CPS form, we can characterize a continuation in the following ways:
+\begin{itemize}
+\item Each function takes its continuation as an extra parameter.
+\item A continuation is only invoked as a tail-call (if a continuation is called, its \href{https://wiki.c2.com/?CallWithCurrentContinuation}{``then-current continuation will be abandoned''}, so a non-tail call would be wasteful).
+\item A continuation takes the result of the previous instruction as its singular parameter.
+\end{itemize}
+
+Note that continuations in CPS are ordinary functions (``callbacks'' in event-driven coding), and thus can be used to implement continuations in a language that doesn't support implicit continuations. CPS is used by Abelson and Sussman to implement continuations in their nondeterministic interpreter, and this is extended for this project.
+
+Other ways to implement continuations will be discussed in \S{\ref{sec:thre}}.
+
+\begin{figure}[h]
+  \centering
+\begin{minted}{scheme}
+;;; without continuations; uses regular return
+(define (add a b)
+  (+ a b))
+(define (mult a b)
+  (* a b))
+(define (a*b+c a b)
+  (add (mult a b) c))
+
+(display (a*b+c 1 2 3)) ;; => 5
+
+;;; continuations using CPS
+(define (add a b cont)
+  (cont (+ a b)))
+(define (mult a b cont)
+  (cont (* a b)))
+(define (a*b+c a b c cont)
+  (mult a b (lambda (a*b)
+              (add a*b c cont))))
+
+(a*b+c 1 2 3 display) ;; => 5
+\end{minted}
+  \caption{Continuation passing style example}
+  \label{fig:cps}
+\end{figure}
+
+\subsection{Nondeterministic computing and the \mintinline{scheme}|amb| keyword}
+\label{sec:nond}
+
+Abelson and Sussman implement the \mintinline{scheme}|amb| keyword in Scheme. This keyword takes a set of possible values as input, and produces a value\footnote{It is ``nondeterministic'' because the keyword only has to return \textit{a} value that satisfies the assertions (conditions). The exact choice of value is not important. Thus it may be better viewed as a SAT-solver, as Matt Might implements using CPS in his blog post on continuations.} that satisfies all of the assertions placed on the value in the future. For example, the example shown in Figure \ref{fig:amb} may assign to \mintinline{scheme}|a| either \texttt{3} or \texttt{5}.
+
+\begin{figure}[h]
+  \centering
+\begin{minted}{scheme}
+(define a (amb '(1 2 3 4 5)))
+(require a odd?)
+(require a prime?)
+\end{minted}
+  \caption{Sample usage of amb}
+  \label{fig:amb}
+\end{figure}
+
+This can be implemented using a search over all the possible solutions. What is really impressive is that we are able to state SAT problem in a declarative manner, rather than embedding it in an algorithm\footnote{The same is true for generators, and is what makes them so powerful.}. Even more impressively, we are able to state the constraints on an ambiguous value in its \textit{future}, and possibly after the value has already been used.
+
+The key part to this implementation is the implicit\footnote{This is my own terminology. I use ``implicit'' to refer to (reified) continuations that are baked into the language and can be used by the interpreter to perform control flow. Optionally, the interpreter may choose to expose these continuations via interfaces such as \mintinline{scheme}|call/cc|. I use ``explicit'' to refer to CPS, in which reified continuations are implemented by the user as explicit procedure calls.} use of continuations. In this case, an additional error continuation is provided to handle the case of a condition failing -- this causes the next value to be tried (if any). This also necessarily undoes any side effects (such as variable mutation) to effective ``time travel'' to the point in the program where the ambiguous value is declared.
+
+Functionally, this can be thought of as a try/catch statement, without the user having to explicitly code the control flow (and simply because there is not a builtin try/catch statement in Scheme).
+
+The interpreter from section 4.3 is based off of the version in 4.1, which uses a procedure-based intermediate representation (IR) for all expressions. The expression is first parsed using the Scheme \mintinline{scheme}|read| procedure, and then semi-compiled into this IR to avoid parsing every time the expression is encountered (if the expression is invoked multiple times).
+
+The form of the procedure representing the compiled expression (the expression IR) is shown in Figure \ref{fig:ir41}. Whenever the expression is invoked, this lambda is called with the current runtime environment.
+
+The analogous expression IR for the nondeterministic backtracking interpreter from section 4.3 is shown in Figure \ref{fig:ir43}. At runtime, each expression is also given two continuations as parameters -- this is known as continuation-passing style (CPS). These continuations are ordinary procedures that should be used to pass around the results of computations. The success continuation takes the value from the previous computation and the failure continuation. The failure computation is special, its only purpose being to discard the value and reverse the stack and side effects so that the next value can be tried -- it does not need the value from the previous computation nor the success continuation.
+
+\begin{figure}[h]
+  \centering
+\begin{minted}{scheme}
+(lambda (env)
+  ;; env stores the symbol table for the current scope
+  ...)
+\end{minted}
+  \caption{Expression IR from section 4.1}
+  \label{fig:ir41}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+\begin{minted}{scheme}
+(lambda (env succeed-cont fail-cont)
+  ;; succeed-cont is of the form (lambda (value fail-cont) ...)
+  ;; fail-cont is of the form (lambda () ...)
+  ...)
+\end{minted}
+  \caption{Expression IR from section 4.3}
+  \label{fig:ir43}
+\end{figure}
+
+\subsection{Continuations versus other control-flow constructs}
+\label{sec:cntf}
+
+This section is structured similarly to the \href{https://en.wikipedia.org/wiki/Coroutine}{Wikipedia page on coroutines}, which is an excellent resource on coroutines.
+
+\subsubsection{Continuations vs. gotos}
+\label{sec:goto}
+
+Gotos are the software equivalent to a jump instruction. They are very simple and limited. For example, they can only jump to other locations in the current function; jumping to another function without modifying the stack would cause relative-addressing (local variables) to break.
+
+Because of this, continuations are more similar to C's \mintinline{c}|setjmp| and \mintinline{c}|longjmp| functions, which essentially save and restore a history of the stack. Not only does this allow you to jump to different functions, it also allows you to jump back multiple levels of the stack. However, reified continuations are more powerful (and expensive) in that they are both optionally-resumable and multiply-resumable\footnote{In order to be multiply-resumable, a continuation essentially needs to create a copy of the stack whenever it is executed. See the section on implementation}.
+
+Also unlike gotos and setjmp/longjmp, continuations usually return a value (from the previous computation). However, this may be because continuations are associated with functional languages.
+
+\subsubsection{Continuations vs. return}
+\label{sec:retu}
+
+A continuation is like a return statement in that it usually passes a value and it (conceptually) unwinds the stack to a given location. However, continuations are optionally-resumable, multiply-resumable, and may unwind the stack more than one stack frame\footnote{The latter is useful in exception handling, or when needing to jump back many stack frames without the overhead of returning from each stack frame, such as in the backtracking nondeterministic interpreter.}.
+
+\subsubsection{Continuations vs. callbacks}
+\label{sec:call}
+
+In CPS, continuations \textit{are} simply callbacks that follow a specific form. In general, first-class continuations feel very much like ordinary callbacks, in that they are invoked with the result of a computation. For example, in Javascript where event-driven coding is common, callbacks to asynchronous functions and the \mintinline{javascript}|Promise| API look very similar to CPS.
+
+Of course, in the case of implicit continuations, there may be special machinery that manages program execution state that cannot be performed with a regular procedure call, but the API is the same as a procedure.
+
+Note that callbacks are also multiply-resumable, optionally-resumable, and capture program state (capture its lexical environment). In general, we can think of continuations as a specific type of callback.
+
+\subsubsection{Continuations vs. monads}
+\label{sec:mona}
+
+Haskell users may know that continuations exist as a monad (\href{https://hackage.haskell.org/package/mtl-2.2.2/docs/Control-Monad-Cont.html}{\mintinline{haskell}|Control.Monad.Cont|}). Even for those who don't (but are familiar with monads), the continuation's structure should feel monadic:
+\begin{itemize}
+\item Continuations act like a wrapper around a computation.
+\item Chaining computations looks very similar to the bind operation.n
+\item Continuations are a control-flow structure.
+\end{itemize}
+
+Consider Figure \ref{fig:hask}, the Haskell analog of the CPS example shown in Figure \ref{fig:cps}. Note that Haskell also has the \mintinline{haskell}|callCC| interface, similar to the \mintinline{scheme}|call/cc| procedure.
+
+\begin{figure}[h]
+  \centering
+\begin{minted}{haskell}
+import           Control.Monad.Cont
+
+mult             :: Int -> Int -> Cont r Int
+mult a b         = return (a * b)
+
+add              :: Int -> Int -> Cont r Int
+add a b          = return (a + b)
+
+-- a * b + c
+atbpc            :: Int -> Int -> Int -> Cont r Int
+atbpc a b c      = mult a b >>= add c
+
+main = do runCont (atbpc 1 2 3) print
+\end{minted}
+  \caption{A sample Haskell continuation}
+  \label{fig:hask}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+\begin{minted}{haskell}
+newtype Cont r t = Cont ((t -> r) -> r)
+  -- a value of type Cont r t is of the form Cont f,
+  -- where f is a function of type (t -> r) -> r
+
+runCont (Cont f) q = f q
+
+instance Monad Cont where
+  return :: t -> Cont r t
+    -- return takes a value of type t
+    -- and produces a Cont computation of type t with response type r.
+  return x = Cont (\q -> q x)
+    -- produce a Cont computation which given a question q,
+    -- applies the question to the value x.
+
+  (>>=) :: Cont r t -> (t -> Cont r s) -> Cont r s
+  x >>= f = Cont (\q -> runCont x (\v -> runCont (f v) q))
+\end{minted}
+  \caption{A simplified continuation monad in Haskell. Source: \href{https://wiki.haskell.org/Cont_computations_as_question-answering_boxes}{Cont computations as question-answering boxes}}
+  \label{fig:mona}
+\end{figure}
+
+\subsubsection{Continuations vs. threads}
+\label{sec:vsth}
+
+\subsection{Uses for continuations}
+\label{sec:uses}
+
+\subsubsection{Continuations as callbacks}
+\label{sec:cacb}
+
+\subsubsection{Nonlocal and contextual branching}
+\label{sec:nonl}
+
+\subsubsection{Exception handling}
+\label{sec:excp}
+
+\subsubsection{Coroutines (and generators)}
+\label{sec:coro}
+
+TODO: also talk about streams and generators (section 4.4)
+
+\subsection{Interesting properties of continuations}
+\label{sec:inte}
+
+\subsubsection{One procedure call, multiple returns}
+\label{sec:mult}
+
+TODO: include Matt Might's idiom here
+
+TODO: discard current continuation if a continuation is called
+
+\subsubsection{Continuations with infinite extent}
+\label{sec:infi}
+
+TODO: talk about TCO?
+
+\subsubsection{Implementation with threads (or vice versa)}
+\label{sec:thre}
+
+\subsubsection{Flavors of continuations}
+\label{sec:flav}
+
+TODO: talk about escape continuations and delimited continuations
+
+\subsection{Analogs in other languages}
+\label{sec:anal}
+
+TODO: Haskell Cont monad
+
+TODO: C setjmp/longjmp
+
+TODO: Python/Kotlin/Go coroutines
+
+TODO: talk about CSP % https://bytes.yingw787.com/posts/2019/02/09/concurrency_with_python_csp_and_coroutines/
+
+\section{Multiple continuations}
+\label{sec:mulc}
+
+
+
+\section{Implementation}
+\label{sec:impl}
+
+\section{Conclusion}
+\label{sec:conc}
+
+\section{References}
+\label{sec:refe}
+
+
+
+\end{document}
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End:

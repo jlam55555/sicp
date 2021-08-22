@@ -3,3 +3,11 @@
 
 # compiled outputs
 *.so
+
+# latex files
+*.aux
+*.log
+*.out
+*.pdf
+auto
+_minted-*
