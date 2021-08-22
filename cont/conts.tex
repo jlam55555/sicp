@@ -4,7 +4,9 @@
 \usepackage{hyperref}
 
 \begin{document}
-\title{Variation on a Scheme:\\Multiple implicit first-class continuations}
+\title{Variation on a Scheme:\\Multiple implicit first-class continuations\\
+  \vspace{6pt}
+  \large{} and a general survey of continuations}
 \author{Jonathan Lam}
 \date{\today{}}
 
@@ -80,7 +82,7 @@ Other ways to implement continuations will be discussed in \S{\ref{sec:thre}}.
 \subsection{Nondeterministic computing and the \mintinline{scheme}|amb| keyword}
 \label{sec:nond}
 
-Abelson and Sussman implement the \mintinline{scheme}|amb| keyword in Scheme. This keyword takes a set of possible values as input, and produces a value\footnote{It is ``nondeterministic'' because the keyword only has to return \textit{a} value that satisfies the assertions (conditions). The exact choice of value is not important. Thus it may be better viewed as a SAT-solver, as Matt Might implements using CPS in his blog post on continuations.} that satisfies all of the assertions placed on the value in the future. For example, the example shown in Figure \ref{fig:amb} may assign to \mintinline{scheme}|a| either \texttt{3} or \texttt{5}.
+Abelson and Sussman implement the \mintinline{scheme}|amb| keyword in Scheme. This keyword takes a set of possible values as input, and produces a value\footnote{It is ``nondeterministic'' because the keyword only has to return \textit{a} value that satisfies the assertions (conditions). The exact choice of value is not important. Thus it may be better viewed as a SAT-solver, as Matt Might implements using CPS in his \href{https://matt.might.net/articles/programming-with-continuations--exceptions-backtracking-search-threads-generators-coroutines/}{blog post on continuations}.} that satisfies all of the assertions placed on the value in the future. For example, the example shown in Figure \ref{fig:amb} may assign to \mintinline{scheme}|a| either \texttt{3} or \texttt{5}.
 
 \begin{figure}[h]
   \centering
@@ -89,7 +91,7 @@ Abelson and Sussman implement the \mintinline{scheme}|amb| keyword in Scheme. Th
 (require a odd?)
 (require a prime?)
 \end{minted}
-  \caption{Sample usage of amb}
+  \caption{Sample usage of \mintinline{scheme}|amb|}
   \label{fig:amb}
 \end{figure}
 
@@ -136,11 +138,58 @@ This section is structured similarly to the \href{https://en.wikipedia.org/wiki/
 \subsubsection{Continuations vs. gotos}
 \label{sec:goto}
 
-Gotos are the software equivalent to a jump instruction. They are very simple and limited. For example, they can only jump to other locations in the current function; jumping to another function without modifying the stack would cause relative-addressing (local variables) to break.
+Gotos are the software equivalent to a jump instruction. They are very simple and limited. For example, they can only jump to other locations in the current function; jumping to another function without modifying the stack would cause relative-addressing (local variables) to break. Also unlike gotos, continuations usually return a value.
 
-Because of this, continuations are more similar to C's \mintinline{c}|setjmp| and \mintinline{c}|longjmp| functions, which essentially save and restore a history of the stack. Not only does this allow you to jump to different functions, it also allows you to jump back multiple levels of the stack. However, reified continuations are more powerful (and expensive) in that they are both optionally-resumable and multiply-resumable\footnote{In order to be multiply-resumable, a continuation essentially needs to create a copy of the stack whenever it is executed. See the section on implementation}.
+Continuations are more similar to C's \mintinline{c}|setjmp| and \mintinline{c}|longjmp| functions, which essentially save and restore a history of the stack. Not only does this allow you to jump to different functions, it also allows you to jump back multiple levels of the stack. However, reified continuations are more powerful (and expensive) in that they are both optionally-resumable and multiply-resumable\footnote{In order to be multiply-resumable, a continuation essentially needs to create a copy of the stack whenever it is executed. See the section on implementation}.
 
-Also unlike gotos and setjmp/longjmp, continuations usually return a value (from the previous computation). However, this may be because continuations are associated with functional languages.
+In \href{https://matt.might.net/articles/programming-with-continuations--exceptions-backtracking-search-threads-generators-coroutines/}{his blog post about continuations}, Matt Might suggests an idiom that behaves very similarly to \mintinline{c}|setjmp|/\mintinline{c}|longjmp|. For those who are unfamiliar with these functions, \mintinline{c}|setjmp| is similar to \mintinline{c}|fork| in that returns different values depending on the context. \mintinline{c}|setjmp| is encountered either it is the next statement to execute, or when \mintinline{c}|longjmp| jumps to it. In the first case, it will return a falsy value, and in the latter it will return the value specified in the \mintinline{c}|longjmp| call.
+
+Might does not explicitly mention \mintinline{c}|setjmp|/\mintinline{c}|longjmp| in his blog post, but the interface is remarkably similar. See a simple error-handling program with a nonlocal jump in C/C++ is shown in Figure \ref{fig:setj}. The equivalent program in Scheme, using the \mintinline{scheme}|setjmp| idiom (Might calls this \mintinline{scheme}|current-continuation| in his examples), is shown in Figure \ref{fig:idio}.
+
+Note that both \mintinline{c}|goto| and \mintinline{c}|setjmp| may be dangerous if there are side effects in the jumped code. \mintinline{c}|goto| is very dangerous since it can actually branch forward in a function, skipping variable initializations completely. \mintinline{c}|setjmp| is less dangerous in that it can only go back to a previous location on the stack (which should be safe), but may cause issues with dangling or incorrect pointers if cleanup code is skipped. Continuations (in Scheme) are safer because they cannot branch forward in time, and because garbage collection would manage dangling references.
+
+\begin{figure}[h]
+  \centering
+\begin{minted}[]{c}
+main() {
+  jmp_buf env;
+  int val;
+
+  val = setjmp (env);
+  if (val) {
+    fprintf (stderr,"Error %d happened",val);
+    exit (val);
+  }
+
+  /* code here */
+
+  longjmp (env,101);   /* signaling an error */
+}
+\end{minted}
+  \caption{Sample usage of \mintinline{c}|setjmp|/\mintinline{c}|longjmp|. Source: \href{http://www.cplusplus.com/reference/csetjmp/setjmp/}{cplusplus.com: \mintinline{c}|setjmp|}}
+  \label{fig:setj}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+\begin{minted}{scheme}
+(define (setjmp)
+  (call/cc (lambda (cc) (cc cc))))
+
+(let ([longjmp (setjmp)])
+  (if [procedure? longjmp]
+      ;; val == false
+      (begin
+        ;; code here
+        (longjmp 101))
+      ;; val = longjmp; val != false
+      (error 'setjmp-example
+             "Received error signal from longjmp"
+             longjmp)))
+\end{minted}
+  \caption{Useful Scheme idiom using continuation that behaves like setjmp. Source: \href{https://matt.might.net/articles/programming-with-continuations--exceptions-backtracking-search-threads-generators-coroutines/}{Continuations by example: Exceptions, time-traveling search, generators, threads, and coroutines}}
+  \label{fig:idio}
+\end{figure}
 
 \subsubsection{Continuations vs. return}
 \label{sec:retu}
@@ -166,7 +215,7 @@ Haskell users may know that continuations exist as a monad (\href{https://hackag
 \item Continuations are a control-flow structure.
 \end{itemize}
 
-Consider Figure \ref{fig:hask}, the Haskell analog of the CPS example shown in Figure \ref{fig:cps}. Note that Haskell also has the \mintinline{haskell}|callCC| interface, similar to the \mintinline{scheme}|call/cc| procedure.
+Consider Figure \ref{fig:hask}, the Haskell analog of the CPS example shown in Figure \ref{fig:cps}. Note that Haskell also has the \mintinline{haskell}|callCC| interface, similar to the \mintinline{scheme}|call/cc| procedure. Figure \ref{fig:mona} shows a sample monad instance declaration for the continuation type. Unsurprisingly, the syntax between Scheme and Haskell turns out to be very similar, even when Scheme continuations feel like procedures and Haskell continuations feel like monads.
 
 \begin{figure}[h]
   \centering
@@ -216,22 +265,83 @@ instance Monad Cont where
 \subsubsection{Continuations vs. threads}
 \label{sec:vsth}
 
+Continuations are like dormant, multiply-resumable threads. In particular, threads represent the current execution context of a program, and can be thought of as a snapshot of location on the stack. However, you cannot resume a thread from the same position  multiple times, unlike continuations.
+
+\href{https://wiki.c2.com/?ContinuationExplanation}{C2 Wiki's ContinuationExplanation} hints that threads can be used to implement continuations, and vice versa. It also mentions that some thread implementations, such as POSIX pthreads, are not as powerful as continuations and cannot fully implement all continuation use cases. Continuation implementation will be further discussed in \S{\ref{sec:thre}}.
+
+Continuations and execution context (and in particular, concurrent threads of execution) is part of the recurring theme, and will appear again in the discussion of coroutines.
+
 \subsection{Uses for continuations}
 \label{sec:uses}
 
-\subsubsection{Continuations as callbacks}
+\subsubsection{Callbacks and promises}
 \label{sec:cacb}
 
-\subsubsection{Nonlocal and contextual branching}
+Even in languages without implicit continuations, callbacks (that look and act a lot like continuations) are widely known and applied. Might's blog post \href{https://matt.might.net/articles/by-example-continuation-passing-style/}{By example: Continuation-passing style} provides the example of a CPS-style wrapper around the legacy \mintinline{javascript}|XMLHttpRequest| Ajax API\footnote{I'm not sure when this blog post was written, since the modern \mintinline{javascript}|fetch| API uses promises rather than callbacks.} that may look extremely natural for Javascript users, even without knowing about continuations.
+
+Another asynchronous programming model in Javascript is the \mintinline{javascript}|Promise| API, which can be thought of as a modern wrapper around callbacks with some nice features. Promises are objects that contain a computation, and allow you to specify a success and error continuation explicitly using the \mintinline{javascript}|Promise::then()| and \mintinline{javascript}|Promise::catch()| methods. Javascript promises have a number of interesting features that make them more appealing than ordinary callbacks, such as their ability to be \mintinline{javascript}|await|-ed to avoid ``callback hell,'' the ability to automatically chain continuations, and the ability to attach multiple continuations to the same operation (which would be called asynchronously due to Javascript's event loop).
+
+Since promises and callbacks are more or less functionally equivalent, scenarios that are expressible using callbacks are also expressible using promises. If we turn the example from Figure \ref{fig:cps} into CPS, and then transform that to use the \mintinline{javascript}|Promise| API, then we would get Figure \ref{fig:prom}.
+
+\begin{figure}[h]
+  \centering
+\begin{minted}{javascript}
+add = (a, b) =>
+  new Promise((succeed_cont, fail_cont) => succeed_cont(a+b));
+
+mult = (a, b) =>
+  new Promise((succeed_cont, fail_cont) => succeed_cont(a*b));
+
+atbpc = (a, b, c) =>
+  new Promise((succeed_cont, fail_cont) =>
+    mult(a, b).then(apb =>
+      add(apb, c).then(succeed_cont)));
+
+atbpc(1, 2, 3).then(console.log);
+\end{minted}
+  \caption{Continuations as Javascript \mintinline{javascript}|Promise|s}
+  \label{fig:prom}
+\end{figure}
+
+As stated earlier, continuations model only a specific subset of callbacks or promises that are useful for execution; namely a single success callback that takes a single parameter (the result of the previous operation), and (optionally) an error callback that takes a single parameter (the error message). For my project, I aim to generalize implicit continuations to the case where there are an arbitrary number of continuations, which is similar to how a function is not limited in the number of callbacks it receives.
+
+\subsubsection{Nonlocal branching}
 \label{sec:nonl}
+
+An example of nonlocal branching is the nondeterministic interpreter in \textit{SICP} section 4.3. Whenever there is a requirement conflict, we have to unwind the stack to the location of the relevant \mintinline{scheme}|amb| invocation, which may be nonlocal.
+
+A personal example I have is when I had to write an A*-search algorithm and chose Scheme. Iterative deepening with a time limit was used; when the time limit was reached, rather than unwinding up the arbitrarily-deep search stack, a continuation served as a much simpler nonlocal goto. (Continuations were not used for the DFS.)
 
 \subsubsection{Exception handling}
 \label{sec:excp}
 
+This can be thought of as an example of nonlocal branching. To implement a try/catch block, a stack of error (failure) continuations has to be implemented alongside the ordinary (success) continuation. Matt Might shows this in his blog post about continuations.
+
+Alternatively, rather than only passing the ordinary continuation to each function in CPS, both the success and failure continuations may be passed as parameters to every function. This may be a little bit more inefficient but has the same effect. This is how failure continuations were passed around in the nondeterministic interpreter.
+
 \subsubsection{Coroutines (and generators)}
 \label{sec:coro}
 
-TODO: also talk about streams and generators (section 4.4)
+As mentioned earlier, continuations are functionally very similar to (and potentially more powerful than) threads. Thus, continuations may be used to implement cooperatively-scheduled threads\footnote{Threads are typically \textit{preemptively scheduled}, which means that they yield control to another thread at arbitrary moments in their execution (generally to maintain performance or responsiveness). \textit{Non-preemptive} or \textit{cooperative} scheduling means that a thread only yields to another thread explicitly.}, coroutines (equivalent to cooperative threads), and generators (a subset of coroutines).
+
+\begin{description}
+  
+\item[Cooperative threading system] Continuations can be used to implement a cooperatively-scheduled threading system by maintaining a collection of continuations representing threads. Each thread may voluntarily yield to another available thread via the yield instruction. The collection may be a queue and the next continuation in the queue will be chosen when a thread yields; this forms a very simple round-robin scheduling algorithm. Matt Might's blog post on continuations includes this as an example. This allows us to create concurrency (but not parallelism) in our interpreter.
+
+  Kotlin has an implementation of cooperative threading that is called coroutines (which are equivalent -- see next example).
+  
+\item[Coroutines] A coroutine is a generalization of a subroutine (procedure) that maintains execution state between calls. It may exit either normally (by returning) or by \textit{yield}ing to another coroutine; when it is invoked again, it will resume execution from the yield point. Coroutines are functionally equivalent to cooperatively-scheduled threads.
+
+  A simple way to implement coroutines is to store a table of continuations for each function. Yielding to a coroutine would mean looking up its continuation and invoking it with the yielded value.
+  
+\item[Generators] Generators are a restricted type of coroutine that is very useful. A generator is a function that yields values one at a time. They are useful as iterators over arbitrary data structures. To the outsider, calling the function successively produces successive values of the collection; this works because the function saves its execution context between calls and thus doesn't lose its position when iterating over the data structure.
+
+  Generators offer a nice solution to iteration that are roughly equivalent to streams (streams are employed in \textit{SICP} section 4.4 as an iterator, but a generator would have worked as well). If neither streams nor generators were present, then implementing an iterator function without nonlocal state becomes difficult.
+
+  Generators are a strict subset of coroutines because the generator function can only yield to its caller, while a full coroutine can yield to any other coroutine. This simplifies the implementation and does not require a table of continuations. Rather, the two functions (generator and consumer) simply pass back and forth the new continuations and the yielded values.
+
+  Many languages implement generators due to their ubiquity, even if they do not implement coroutines.
+\end{description}
 
 \subsection{Interesting properties of continuations}
 \label{sec:inte}
@@ -240,12 +350,12 @@ TODO: also talk about streams and generators (section 4.4)
 \label{sec:mult}
 
 TODO: include Matt Might's idiom here
-
 TODO: discard current continuation if a continuation is called
 
-\subsubsection{Continuations with infinite extent}
-\label{sec:infi}
+\subsubsection{Continuations with unlimited extent}
+\label{sec:unli}
 
+TODO: move this into the implemenation section?
 TODO: talk about TCO?
 
 \subsubsection{Implementation with threads (or vice versa)}
@@ -261,7 +371,7 @@ TODO: talk about escape continuations and delimited continuations
 
 TODO: Haskell Cont monad
 
-TODO: C setjmp/longjmp
+TODO: C setjmp/longjmp: TODO give example
 
 TODO: Python/Kotlin/Go coroutines
 

@@ -10,4 +10,5 @@
 *.out
 *.pdf
 auto
-_minted-*
+_minted*
+_*.tex
