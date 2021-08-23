@@ -132,15 +132,27 @@
 			 (cdr ccs))))
 	(cdr ccs)))))
 
+(define (mi::continuation-procedure? proc)
+  (mi::tagged-list? proc 'continuation))
+
 (define (mi::execute-application proc args ccs)
   (cond ([mi::primitive-procedure? proc]
+	 ;; primitive procedures return from main cc only
 	 ((mi::main-cc ccs) (mi::apply-primitive-procedure proc args)))
+
+	([mi::continuation-procedure? proc]
+	 ;; continuations discard all ccs; the new continuations are those from
+	 ;; when the cc was created
+	 ((lambda _ (void)) (mi::apply-primitive-procedure proc args)))
+	
 	([mi::compound-procedure? proc]
+	 ;; compound procedures forward the ccs
 	 ((mi::procedure-body proc)
 	  (mi::extend-environment (mi::procedure-parameters proc)
 				  args
 				  (mi::procedure-environment proc))
 	  ccs))
+	
 	(else
 	 (error 'mi::execute-application "unknown procedure type" proc))))
 
@@ -160,15 +172,8 @@
   (let ([input (read)])
     (mi::conts-eval input
 		    mi::*global-environment*
-		    (list
-		     ;; default main continuations
-		     (lambda (val)
-		       (mi::user-print val)
-		       (mi::driver-loop))
-		     ;; default error continuation
-		     (lambda (val)
-		       (mi::error-print val)
-		       (mi::driver-loop))))))
+		    (list mi::user-print mi::error-print))
+    (mi::driver-loop)))
 
 (define (mi::error-print object)
   ;; show eval output to user
@@ -222,7 +227,7 @@
 
 ;;; implementing `procedure?`
 (define (mi::procedure?? exp)
-  (mi::tagged-list? exp 'procedure?))
+  (or (mi::tagged-list? exp 'procedure?)))
 
 (define (mi::procedure?-arg exp)
   (cadr exp))
@@ -235,7 +240,8 @@
 	      (lambda (f)
 		((mi::main-cc ccs)
 		 (or (mi::primitive-procedure? f)
-		     (mi::compound-procedure? f))))
+		     (mi::compound-procedure? f)
+		     (mi::continuation-procedure? f))))
 	      (cdr ccs))))))
 
 ;;; implementing `call/ccs`
@@ -246,19 +252,20 @@
   (cadr exp))
 
 (define (mi::analyze-call/ccs exp)
-  ;; for (call/cc f), call f, binding the continuation as a primitive
-  ;; procedure to the argument of f
+  ;; for (call/cc f), call f, binding the continuation
+  ;; as a primitive procedure to the argument of f
   (let ([fproc (mi::analyze (mi::call/ccs-arg exp))])
     (lambda (env ccs)
-      (fproc env
-	     (cons
-	      (lambda (proc)
-		(mi::execute-application
-		 proc
-		 (list
-		  (map (lambda (cc) (list 'primitive cc)) ccs))
-		 ccs))
-	      (cdr ccs))))))
+      (fproc
+       env
+       (cons
+	(lambda (proc)
+	  (mi::execute-application
+	   proc
+	   (list
+	    (map (lambda (cc) (list 'continuation cc)) ccs))
+	   ccs))
+	(cdr ccs))))))
 
 ;;; implementing `call/new-ccs`
 ;;; sample usage:
@@ -283,50 +290,34 @@
 (define (mi::call/new-ccs-body exp)
   (caddr exp))
 
-;; (define (mi::analyze-call/new-ccs exp)
-;;   (let ([fproc (mi::analyze (mi::call/new-ccs-arg exp))]
-;; 	[body (mi::analyze (mi::call/new-ccs-body exp))])
-;;     (lambda (env ccs)
-;;       (fproc env
-;; 	     (cons
-;; 	      (lambda (proc)
-;; 		(mi::execute-application
-;; 		 proc
-;; 		 (list
-;; 		  (map (lambda (cc) (list 'primitive cc)) ccs))
-;; 		 ccs))
-;; 	      (cdr ccs))))))
-
 (define (mi::analyze-call/new-ccs exp)
   (let ([fproc (mi::analyze (mi::call/new-ccs-generator exp))]
 	[body (mi::analyze (mi::call/new-ccs-body exp))])
     (lambda (env ccs)
-      (fproc env
-	     (cons
-	      (lambda (proc)
-		(mi::execute-application
-		 proc
-		 (list
-		  (map (lambda (cc) (list 'primitive cc)) ccs))
-		 (cons
-		  (lambda (new-ccs)
-		    ;; (inspect new-ccs)
-		    ;; (inspect body)
-		    ;; no safety checks!!!
-		    ;; run the body with the user-supplied ccs; need to map
-		    ;; them to regular functions
-		    (body env
-			  (map
-			   (lambda (cc)
-			     (lambda (val)
-			       ;; TODO: working here
-			       (mi::execute-application
-				cc
-				(list val)
-				ccs)))
-			   new-ccs)))
-		  (cdr ccs))))
-	      (cdr ccs))))))
+      (fproc
+       env
+       (cons
+	(lambda (proc)
+	  (mi::execute-application
+	   proc
+	   (list
+	    (map (lambda (cc) (list 'continuation cc)) ccs))
+	   (cons
+	    (lambda (new-ccs)
+	      ;; no safety checks!!!
+	      ;; run the body with the user-supplied ccs; need to map
+	      ;; them to regular functions
+	      (body env
+		    (map
+		     (lambda (cc)
+		       (lambda (val)
+			 (mi::execute-application
+			  cc
+			  (list val)
+			  ccs)))
+		     new-ccs)))
+	    (cdr ccs))))
+	(cdr ccs))))))
 
 ;;; TODO: examples of all functions
 ;;; TODO: allow setting multiple continuations
@@ -392,6 +383,19 @@
 ;;    (my-/ 1 1))
 ;;  (lambda (err) "outer error"))
 
+;;; have fun deciphering this one
+;; (define cont false)
+;; [begin
+;;   (define err-cont
+;;     (call/cc (lambda (cc)
+;; 	       (set! cont cc)
+;; 	       (lambda (_) (display "default err cont\n")))))
+;;   (try/catch
+;;    (lambda () (throw 32))
+;;    err-cont)]
+;; (call/cc (lambda (cc) (cont cc)))
+;; (call/ccs (lambda (ccs) (cont (car (cdr ccs)))))
+
 ;;; other error control flows that can be implemented in this framework:
 ;;; `try/catch-finally`
 ;;; `call/nth-cc` -> `call/cc` = `call/main-cc`, `call/error-cc`
@@ -400,22 +404,6 @@
 
 ;;; note: `call/new-ccs` is extremely powerful and dangerous -- I think?
 ;;; have to come up with some disastrous scenarios
-
-;;; think about:
-;;; - relationship to monads
-;;; - relationship to callbacks
-;;; - relationship to CPS (how much of this is just CPS?)
-;;; - relationship to concurrency/threads
-;;; - relationship to coroutines and generators
-;;; - relationship to communicating sequential processes (CPS and CSP)
-;;; - other possible use cases for multiple continuations
-;;; - multiple returns (non-tail recursive) -- what is desired behavior?
-;;; - compiler IR and optimized tail calls (function calls become goto)
-;;; - continuation vs. processes OS-level scheduling
-;;; - efficient implementation with infinite extent
-;;; - why do most programming languages not have this? How practical is this?
-;;; - asynchronous programming (e.g., promises, fetch) -- requires threads
-;;; - continuation is like a function call that never returns
 
 ;;; (an attempt at a) generators example, following Matt Might's example
 

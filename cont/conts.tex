@@ -7,7 +7,7 @@
 \setminted{frame=single}
 
 \begin{document}
-\title{Variation on a Scheme:\\Multiple implicit first-class continuations\\
+\title{Variation on a Scheme:\\multiple implicit first-class continuations\\
   \vspace{6pt}
   \large{} and a general survey of continuations}
 \author{Jonathan Lam}
@@ -46,7 +46,7 @@ I wholly agree with this sentiment. There are a dozen different ways to interpre
 \subsection{What are continuations?}
 \label{sec:what}
 
-As Might points out, a common way to describe continuations are that they are the ``future'' of an expression. Luckily, Scheme's syntax is able to provide an objective way to view the future of an expression: the future of an expression is the containing expression. This is due to the fact that parameters are fully evaluated before the function is applied. Consider Figure \ref{fig:cexp}. The result of the subexpression \mintinline{scheme}|(* a b)| is the addition by \mintinline{scheme}|c|, so we can express its continuation as a procedure that performs this action: \mintinline{scheme}|(lambda (val) (+ val c))|. Note that each expression has an implicit continuation; the continuations for each subexpression are shown.
+As Might points out, a common way to describe continuations are that they are the ``future'' of an expression. Luckily, Scheme's syntax is able to provide an objective way to view the future of an expression: the future of an expression is the containing expression. This is due to the fact that parameters are fully evaluated before the function is applied. Consider Figure \ref{fig:cexp}. The result of the subexpression \mintinline{scheme}|(* a b)| is the addition by \mintinline{scheme}|c|, so we can express its continuation as a procedure that performs this action: \mintinline{scheme}|(lambda (val) (+ val c))|. The futures (continuations) for each subexpression are also shown in the figure.
 
 Another way to think about it is that the continuation for any expression is the (implicit) callback for a given computation. After \mintinline{scheme}|(* a b)| is fully computed, then it should send its result to the lambda function representing its continuation. This should not feel too strange to those familiar with asynchronous programming: often the result of an asynchronous computation is passed to a specified callback or handler function.
 
@@ -68,6 +68,8 @@ Continuations become very useful if the programmer has access to them. For examp
 \end{figure}
 
 Of course, this is not a complete characterization, and the rest of the background section will be used to foster a more complete understanding of continuations. At many times, continuations will feel like an analogous construct in another language; it may seem like a ``first-class return'' or a ``snapshot of the program state''; no single characterization is universally better than another.
+
+Note that each expression or statement (in any programming language) has an implicit continuation, and continuations are an incredibly general concept. For example, the continuation of a statement in a sequence of statements is the next statement. However, we are only concerned with \textit{reified} continuations in this report (i.e., continuations with a concrete implementation in the programming language), and often \textit{first-class} reified continuations (continuations that appear as first-class objects to the programmer).
 
 \subsubsection{The \mintinline{scheme}|call/cc| API}
 \label{sec:cacc}
@@ -335,7 +337,7 @@ instance Monad Cont where
 
 Continuations are like dormant, multiply-resumable threads. In particular, threads represent the current execution context of a program, and can be thought of as a snapshot of location on the stack. However, you cannot resume a thread from the same position  multiple times, unlike continuations.
 
-\href{https://wiki.c2.com/?ContinuationExplanation}{C2 Wiki's ContinuationExplanation} hints that threads can be used to implement continuations, and vice versa. It also mentions that some thread implementations, such as POSIX pthreads, are not as powerful as continuations and cannot fully implement all continuation use cases. Continuation implementation will be further discussed in \S{\ref{sec:thre}}.
+\href{https://wiki.c2.com/?ContinuationExplanation}{WikiWikiWeb's ContinuationExplanation} hints that threads can be used to implement continuations, and vice versa. It also mentions that some thread implementations, such as POSIX pthreads, are not as powerful as continuations and cannot fully implement all continuation use cases. Continuation implementation will be further discussed in \S{\ref{sec:thre}}.
 
 Continuations and execution context (and in particular, concurrent threads of execution) is part of the recurring theme, and will appear again in the discussion of coroutines.
 
@@ -367,7 +369,7 @@ atbpc = (a, b, c) =>
 
 atbpc(1, 2, 3).then(console.log);
 \end{minted}
-  \caption{Continuations as Javascript \mintinline{javascript}|Promise|s}
+  \caption{CPS using Javascript \mintinline{javascript}|Promise|s}
   \label{fig:prom}
 \end{figure}
 
@@ -461,7 +463,7 @@ It's been hinted several times that the implementation of continuations would be
 
 Another issue that makes it harder to optimize is that continuations have \textit{unlimited extent} -- they exist over the lifetime of the program, potentially outside of the context (closure) that they were created in. Thus it is possible to not only unroll the stack to a previous position, but to also enter a deeper position in the stack. As a result, optimizations must maintain a reference to all parts of the stack that are present at the time of the continuation being called.
 
-\textit{Segmented stacks} and \textit{cactus stacks} are optimizations that allow multiply-resumable continuations unlimited extent by branching the stack and reusing memory when possible. Copy-on-write (COW) is a common memory optimization technique that also applies here to avoid copying the stack unless necessary. A more complete discussion of implementation is given in \href{https://wiki.c2.com/?ContinuationImplementation}{C2 Wiki: ContinuationImplementation}.
+\textit{Segmented stacks} and \textit{cactus stacks} are optimizations that allow multiply-resumable continuations unlimited extent by branching the stack and reusing memory when possible. Copy-on-write (COW) is a common memory optimization technique that also applies here to avoid copying the stack unless necessary. A more complete discussion of implementation is given in \href{https://wiki.c2.com/?ContinuationImplementation}{WikiWikiWeb: ContinuationImplementation}.
 
 As mentioned previously, one way to implement continuations is using CPS. CPS usually depends on tail-call optimization (TCO).
 
@@ -470,7 +472,7 @@ We can simplify the implementation by restricting the capability of continuation
 \subsubsection{Flavors of continuations}
 \label{sec:flav}
 
-In the previous section, we have already talked about two forms of restricted continuations: single-use and escape continuations. Continuations with both of these restrictions of these are very similar to \mintinline{c}|setjmp| -- this is still powerful enough for exception handling, generic nonlocal jumps. The C2 article on \href{http://c2.com/wiki/remodel/?SingleUseContinuation}{single-use continuations} notes that \mintinline{c}|setjmp| can be used to implement a multi-use branch point using the very simple idiom \mintinline{c}|while(setjmp(buf));|. The \href{https://en.wikipedia.org/wiki/Continuation#Kinds}{Wikipedia article on continuations} notes that escape continuations are a means to implement TCO.
+In the previous section, we have already talked about two forms of restricted continuations: single-use and escape continuations. Continuations with both of these restrictions of these are very similar to \mintinline{c}|setjmp| -- this is still powerful enough for exception handling, generic nonlocal jumps. The WikiWikiWeb article on \href{http://c2.com/wiki/remodel/?SingleUseContinuation}{single-use continuations} notes that \mintinline{c}|setjmp| can be used to implement a multi-use branch point using the very simple idiom \mintinline{c}|while(setjmp(buf));|. The \href{https://en.wikipedia.org/wiki/Continuation#Kinds}{Wikipedia article on continuations} notes that escape continuations are a means to implement TCO.
 
 There are also \textit{delimited continuations}, which are a generalization of the continuations mentioned thus far. Rather than capturing the entire execution state, a part of the stack can be captured. Its API are the \mintinline{scheme}|shift| and \mintinline{scheme}|control| procedures (rather than \mintinline{scheme}|call/cc|).
 
@@ -479,7 +481,7 @@ There are also \textit{delimited continuations}, which are a generalization of t
 
 Several examples of continuations in other languages have been provided; this section serves as a summary.
 
-In C, the flow-control capability of \mintinline{c}|goto|, \mintinline{c}|return|, and \mintinline{c}|setjmp| are all a subset of the ability of continuations. Of these, \mintinline{c}|setjmp| is the most powerful and are rougghly equivalent to single-use escape continuations.
+In C, the flow-control capability of \mintinline{c}|goto|, \mintinline{c}|return|, and \mintinline{c}|setjmp| are all a subset of the ability of continuations. Of these, \mintinline{c}|setjmp| is the most powerful and are roughly equivalent to single-use escape continuations.
 
 In Haskell, continuations are exposed as a monadic type. Expressing chained computations using the bind (\mintinline{haskell}|>>=|) operator is very natural.
 
@@ -488,31 +490,254 @@ Many languages have some support for generators (e.g., Python), cooperative sche
 \section{Multiple continuations}
 \label{sec:mulc}
 
+\subsection{Functional API}
+\label{sec:func}
 
-\section{Implementation}
-\label{sec:impl}
+For the implementation part of the project, I decided to try implementing a system of multiple continuations. Functionally, this is equivalent to CPS with an arbitrary number of continuations (callbacks), but the continuations are defined implicitly so that the programmer does not have to carry the continuations through all of the function signatures. This is a simple generalization of the single-continuation scheme and may be useful where multiple ``futures'' are useful, such as a default and error future in exception handling.
 
-TODO: not implemented -- discard the current continuation
+The implementation is based on sections 4.1 and 4.3 of \textit{SICP}. The nondeterministic interpreter uses a CPS IR but doesn't expose continuations to the user. It implements two continuations for every expression: a default (success) continuation, and a special-purpose backtracking (failure) continuation\footnote{Alternatively, the failure continuation may be implemented in an external runtime stack rather than be passed around to every function as a parameter -- this may be more efficient. Exceptions may also be handled this way.}. For this project, the special failure continuation is removed, and the default continuation is replaced with a list of continuations.
+
+To the programmer, the introduction of multiple continuations change would look like the creation of a few APIs, described below, that are not present in the interpreter given in the book. The first is the familiar \mintinline{scheme}|call/cc| API (which does not require multiple continuations). In the case of the latter APIs, we establish the convention that the first continuation is the default continuation, the second continuation is an error continuation, and any others are user-defined.
+
+\subsubsection{Exposing continuations via the \mintinline{scheme}|call/cc| API}
+\label{sec:imcc}
+
+This API should appear to the programmer exactly like the builtin \mintinline{scheme}|call/cc| implementation described in \S{\ref{sec:cacc}}. In particular, it should call the provided procedure with the current (default) continuation as the sole argument. The continuation should be a first-class object, and invoking it should appear no differently than an ordinary function call. If a continuation is invoked, then the current continuation should be discarded.
+
+This is implemented in terms of the more general case for multiple continuations; the implementation is shown in Figure \ref{fig:demo}.
+
+\subsubsection{Multiple continuations via the \mintinline{scheme}|call/ccs| API}
+\label{sec:iccs}
+
+This API is very similar to \mintinline{scheme}|call/cc|, except that the argument to the function is the list of current continuations.
+
+As an example, the code to send a value to the error continuation (to \mintinline{scheme}|throw| a value) is shown in Figure \ref{fig:demo}.
+
+\subsubsection{User-defined continuations via the \mintinline{scheme}|call/new-ccs| API}
+\label{sec:icnc}
+
+This API is unlike anything in the Scheme language, so it is worth describing it here. This procedure takes two arguments: a procedure that transforms the current continuations and produces the new continuations, and an expression to invoke with the new ccs.
+
+As an example, the code to switch the default and secondary continuations is shown in Figure \ref{fig:demo}.
+
+\begin{figure}
+  \centering
+\begin{minted}{scheme}
+;;; implement `call/cc` using `call/ccs`
+(define (call/cc f)
+  (call/ccs (lambda (ccs)
+              (f (car ccs)))))
+
+;;; implement throw using `call/ccs`
+(define (throw val)
+  (call/ccs
+   (lambda (ccs)
+     ((cadr ccs) val))))
+
+;;; swap the default and error continuations using `call/new-ccs`
+(call/new-ccs
+  ;; cc transformer function swaps first and second ccs
+  (lambda (ccs)
+    (cons (cadr ccs)
+          (cons (car ccs)
+                (cddr ccs))))
+
+  42             ;; goes to error continuation
+  ; (throw 42)   ;; goes to default continuation
+)
+\end{minted}
+  \caption{Intuitive of the API functions}
+  \label{fig:demo}
+\end{figure}
+
+\subsection{Implementation}
+\label{sec:arch}
+
+Firstly, some terminology should be established since we are working with Scheme code in the implementation of the interpreter, as well as Scheme code that may be run in the interpreter. This is non-standard -- I'm not sure what the convention is for interpreter-writers.
+\begin{description}
+\item[Programmer-space] This refers to code that the programmer may type into the interpreter.
+\item[Interpreter-space] This refers to code in the implementation of the interpreter (including any IRs for programmer-space constructs).
+\end{description}
+
+All of the expression syntactical analysis functions in the IR must return a CPS function, in the same manner as the nondeterministic interpreter. However, instead of receiving two continuations, it receives a list of continuations. For almost all cases, the procedure is exited by calling the first (default) continuation with the expression value.
+
+The tricky part is that every time we invoke an IR procedure of this form, we must supply an array of continuations. If we need to modify the default continuation, then we must \mintinline{scheme}|cons| this to the rest of the original continuations. This makes the CPS more tedious.
+
+To represent the continuations (ordinary procedures in interpreter-space) as procedurs in programmer-space, we must wrap them with some metadata like we do for primitive and compound procedures. In this case, we simply tag the continuation with the symbol \mintinline{scheme}|'continuation|. Continuation invocation is treated the same as a primitive procedure in \mintinline{scheme}|execute-application|, except that the current continuations are discarded when a continuation is executed.
+
+The implementations for \mintinline{scheme}|call/ccs| and \mintinline{scheme}|call/new-ccs| is shown in Figure \ref{fig:impl}. The implementation for \mintinline{scheme}|call/cc| was already shown above; it is a special case of \mintinline{scheme}|call/ccs|, and can be trivially written in terms of it. (Note that while the former two are \textit{special forms}, the latter is an ordinary procedure in programmer-space.)
+
+Note that the continuations for the user-specified continuations in \mintinline{scheme}|call/new-ccs| are the continuations for the \mintinline{scheme}|call/new-ccs| expression. This essentially automatically creates a stack of continuations. For example, throwing an exception inside a try/catch block would go to its error continuation (the catch clause). Throwing an error inside the catch clause would then go to its error continuation (which should be the error continuation of the try/catch block).
+
+I should also add that I do not know how continuations and the \mintinline{scheme}|call/cc| interface are implemented in Scheme (and the implementation may differ between Schemes). This is also not intended to be a very efficient implementation, but is rather a proof-of-concept that continuations can be implemented very simply in a functional language with lambda closures, garbage collection, and TCO.
+
+There may be a number of safety issues with \mintinline{scheme}|call/new-ccs|, especially with the ability to overwrite the default continuation. For this exploratory assignment, I have left it alone in all its dangerous glory, but this should probably not be productionized.
+
+\begin{figure}
+  \centering
+\begin{minted}{scheme}
+(define (mi::analyze-call/ccs exp)
+  ;; for (call/cc f), call f, binding the continuation
+  ;; as a primitive procedure to the argument of f
+  (let ([fproc (mi::analyze (mi::call/ccs-arg exp))])
+    (lambda (env ccs)
+      (fproc
+       env
+       (cons
+	(lambda (proc)
+	  (mi::execute-application
+	   proc
+	   (list
+	    (map (lambda (cc) (list 'continuation cc)) ccs))
+	   ccs))
+	(cdr ccs))))))
+
+(define (mi::analyze-call/new-ccs exp)
+  (let ([fproc (mi::analyze (mi::call/new-ccs-generator exp))]
+	[body (mi::analyze (mi::call/new-ccs-body exp))])
+    (lambda (env ccs)
+      (fproc
+       env
+       (cons
+	(lambda (proc)
+	  (mi::execute-application
+	   proc
+	   (list
+	    (map (lambda (cc) (list 'continuation cc)) ccs))
+	   (cons
+	    (lambda (new-ccs)
+	      ;; no safety checks!!! run body with 
+              ;; user-supplied ccs mapped to primitive procs
+	      (body env
+		    (map
+		     (lambda (cc)
+		       (lambda (val)
+			 (mi::execute-application
+			  cc
+			  (list val)
+			  ccs)))
+		     new-ccs)))
+	    (cdr ccs))))
+	(cdr ccs))))))
+\end{minted}
+  \caption{Implementations of call/ccs and call/new-ccs}
+  \label{fig:impl}
+\end{figure}
+
+\subsection{Examples}
+\label{sec:exam}
+
+Implementing try/catch is very simple in programmer-space, and is shown in Figure\ref{fig:tryc} (the implementation for \mintinline{scheme}|throw| was already shown in Figure \ref{fig:demo}). The only caveat is that the try and catch clauses must be provided as lambdas rather than plain expressions, in order to avoid their eager evaluation. (If it were implemented as a special form, or if syntactic macros were implemented in the interpreter, plain expressions would be possible.)
+
+\begin{figure}
+  \centering
+\begin{minted}{scheme}
+(define (try/catch try catch)
+   ;; try is a thunk
+   ;; catch is a proc that takes the error msg as input
+   ;; both try and catch return a value
+   (call/new-ccs
+    (lambda (ccs)
+      (cons (car ccs)
+        (cons catch
+	      (cdr (cdr ccs)))))
+    (try)))
+
+(define (my-/ x y)
+  ;; modified version of `/` that calls the error
+  ;; continuation on div0
+  (if [= y 0]
+      (throw "my-/: /0")
+      (/ x y)))
+
+(try/catch
+ (lambda () (my-/ 1 2))
+ (lambda (err) "oh no"))
+;; => 1/2
+
+(try/catch
+ (lambda () (my-/ 1 0))
+ (lambda (err) "oh no"))
+;; => "oh no"
+
+(try/catch
+ (lambda () (throw 32))
+ (lambda (err) (throw 54) "oh no"))
+;; => "top-level error continuation called with irritant 54"
+\end{minted}
+  \caption{\mintinline{scheme}|try/catch| implementation and usage}
+  \label{fig:tryc}
+\end{figure}
+
+Matt Might also provides an example of generators using continuations in his blog post \href{https://matt.might.net/articles/programming-with-continuations--exceptions-backtracking-search-threads-generators-coroutines/}{Continuations by example: Exceptions, time-traveling search, generators, threads, and coroutines}. While this does not use multiple continuations at all, it is a good proof-of-concept of generators, and is more evidence that my implementation of \mintinline{scheme}|call/cc| is correct. My implementation of the generator in programmer-space is not the most convenient form. Might writes his in terms of syntactic macros to make the syntax much more appealing. My implementation is shown in Figure \ref{fig:gene}.
+
+\begin{figure}
+  \centering
+\begin{minted}{scheme}
+(define (current-continuation)
+  (call/cc (lambda (cc) (cc cc))))
+
+(define (tree-iterator tree)
+  (lambda (yield)
+    (define (walk tree)
+      (if [not (pair? tree)]
+	  (yield tree)
+	  (begin
+	    (walk (car tree))
+	    (walk (cdr tree)))))
+    (walk tree)))
+
+(define (make-yield for-cc)
+  (lambda (value)
+    ;; `yield` implementation
+    (define cc (current-continuation))
+    (if [procedure? cc]
+	;; when called from generator, return to for loop cont
+	(for-cc (cons cc value))
+	;; when called from for loop, return to generator cont
+	(void))))
+
+(define (for-generator iterator body)
+  (define (loop iterator-cont)
+    (define cc (current-continuation))
+    (if [procedure? cc]
+	;; get next value using the generator continuation
+	(if iterator-cont
+	    (iterator-cont (void))
+	    (iterator (make-yield cc)))
+	;; value handler: receive new value and continuation
+	[begin
+	  (body (cdr cc))       ; next generator value
+	  (loop (car cc))]))    ; next generator continuation
+  ;; begin iterator loop with no iterator continuation
+  (loop false))
+
+(define (println val) (display val) (display "\n"))
+
+(for-generator (tree-iterator (cons 3 (cons (cons 4 5) 6)))
+               println)
+;; => 3 4 5 6
+\end{minted}
+  \caption{Demonstration of generators using \mintinline{scheme}|call/cc|}
+  \label{fig:gene}
+\end{figure}
+
+\subsection{Source code}
+\label{sec:sour}
+
+My implementation as the files \texttt{4.1/4.1.scm} and \texttt{cont/conts.scm} in the GitHub repository \href{https://www.github.com/jlam55555/sicp}{jlam55555/sicp}.
 
 \section{Conclusion}
 \label{sec:conc}
 
-TODO: also made me interested in:
-- segmented and cactus stacks performance tradeoffs
-- delimited continuations
-- promise implementation and relation to monads
-- goroutine implementation and relation to coroutines
-- compiling with continuations
+I was able to explore continuations to a much greater depth of understanding than before. Perhaps more importantly, this discussion has piqued my interest on a number of other related topics, including: segmented and cactus stacks; delimited continuations; implementation of Javascript \mintinline{javascript}|Promise|s and their relationship to monads; goroutine implementation and relationship to coroutines; reading Andrew Appel's \textit{Compiling with Continuations}.
+
+Unfortunately, my extension to the continuations API is probably not that useful; with the exception of the simple implementation of try/catch in programmer-space, I could not think of any other use cases where this API is more useful than simply passing around multiple continuations (or simply callbacks) as needed. Efficiency was not a concern during this project, but this new feature probably adds a nontrivial overhead to function calls as well.
 
 \section{References}
 \label{sec:refe}
 
-- my previous blog post: 27
-- sicp: especially chapter 4
-- c2 wiki: continuationsexplanation, continuationimplementation, continuationsaregotos, callwithcurrentcontinuation
-- matt might: continuations, compiling with continuations, cps
-- wikipedia: continuations, cps, tco
-- haskell wiki: continuation, cont computations as question-answering boxes
+Since most of the sources are not academic with auto-generated BibTeX citations, and are easily accessible via the web, I have chosen to include the sources as links throughout the document in lieu of a more formal citation style.
 
 \end{document}
 %%% Local Variables:

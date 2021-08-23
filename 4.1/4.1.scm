@@ -468,6 +468,10 @@
 	(list 'void void)
 	(list 'not not)
 	(list 'pair? pair?)
+	(list 'caar caar)
+	(list 'cadr cadr)
+	(list 'cdar cdar)
+	(list 'cddr cddr)
 	;; can add more primitives here
 	))
 
