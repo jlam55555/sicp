@@ -9,7 +9,7 @@
 \begin{document}
 \title{Variation on a Scheme:\\multiple implicit first-class continuations\\
   \vspace{6pt}
-  \large{} and a general survey of continuations}
+  \normalsize{} and a general attempt at understanding continuations}
 \author{Jonathan Lam}
 \date{\today{}}
 
@@ -18,9 +18,9 @@
 \section{Introduction}
 \label{sec:intr}
 
-This is for the completion of ECE491: Structure and Implementation of Computer Programs, based on the text of the same name by Abelson and Sussman. The assignment was to implement a variation on the interpreter presented in sections 4.1-4.4.
+This is for the completion of ECE491: Structure and Implementation of Computer Programs, based on the text of the same name by Abelson and Sussman. The assignment was to implement an extension of the interpreter presented in sections 4.1-4.4.
 
-This work extends the work presented in section 4.3: ``Variations on a Scheme -- Nondeterministic Computing.'' The section uses implicit continuations to implement the \mintinline{scheme}|amb| keyword. This work extends that in two ways by:
+This work extends the implementation presented in section 4.3: ``Variations on a Scheme -- Nondeterministic Computing.'' The section uses implicit continuations to implement the \mintinline{scheme}|amb| keyword. This work extends that in two ways by:
 \begin{itemize}
 \item providing an arbitrary number of continuations, rather than only two (success and fail); and
 \item exposing continuations as first-class objects using the \mintinline{scheme}|call/cc| interface
@@ -81,6 +81,10 @@ In the previous section, continuations are characterized as procedures; but how 
 \begin{figure}
   \centering
 \begin{minted}{scheme}
+;; the original expression
+(+ 1 (+ 2 (+ 3)))
+;; => 6
+
 ;; continuations are optionally-resumable:
 ;; i.e., may not be invoked at all
 (+ 1 (call/cc (lambda (cc) (+ 2 (+ 3)))))
@@ -129,7 +133,7 @@ Other ways to implement continuations will be discussed in \S{\ref{sec:thre}}.
   (+ a b))
 (define (mult a b)
   (* a b))
-(define (a*b+c a b)
+(define (a*b+c a b c)
   (add (mult a b) c))
 
 (display (a*b+c 1 2 3)) ;; => 5
@@ -490,10 +494,18 @@ Many languages have some support for generators (e.g., Python), cooperative sche
 \section{Multiple continuations}
 \label{sec:mulc}
 
+For this project, I decided to extend the Scheme interpreter by implementing a system of \textit{multiple continuations} in programmer-space via a \mintinline{scheme}|call/cc|-like interface.
+
+The following terminology should be established since we are working with Scheme code in the implementation of the interpreter, as well as Scheme code that may be run in the interpreter. This is non-standard -- I'm not sure what the convention is for interpreter-writers.
+\begin{description}
+\item[Programmer-space] This refers to code that the programmer may type into the interpreter.
+\item[Interpreter-space] This refers to code in the implementation of the interpreter (including any IRs for programmer-space constructs).
+\end{description}
+
 \subsection{Functional API}
 \label{sec:func}
 
-For the implementation part of the project, I decided to try implementing a system of multiple continuations. Functionally, this is equivalent to CPS with an arbitrary number of continuations (callbacks), but the continuations are defined implicitly so that the programmer does not have to carry the continuations through all of the function signatures. This is a simple generalization of the single-continuation scheme and may be useful where multiple ``futures'' are useful, such as a default and error future in exception handling.
+Functionally, multiple continuations is equivalent to CPS with an arbitrary number of continuations (callbacks), but the continuations are defined implicitly so that the programmer does not have to carry the continuations through all of the function signatures. This is a simple generalization of the single-continuation scheme and may be useful where multiple ``futures'' are useful, such as a default and error future in exception handling.
 
 The implementation is based on sections 4.1 and 4.3 of \textit{SICP}. The nondeterministic interpreter uses a CPS IR but doesn't expose continuations to the user. It implements two continuations for every expression: a default (success) continuation, and a special-purpose backtracking (failure) continuation\footnote{Alternatively, the failure continuation may be implemented in an external runtime stack rather than be passed around to every function as a parameter -- this may be more efficient. Exceptions may also be handled this way.}. For this project, the special failure continuation is removed, and the default continuation is replaced with a list of continuations.
 
@@ -552,12 +564,6 @@ As an example, the code to switch the default and secondary continuations is sho
 
 \subsection{Implementation}
 \label{sec:arch}
-
-Firstly, some terminology should be established since we are working with Scheme code in the implementation of the interpreter, as well as Scheme code that may be run in the interpreter. This is non-standard -- I'm not sure what the convention is for interpreter-writers.
-\begin{description}
-\item[Programmer-space] This refers to code that the programmer may type into the interpreter.
-\item[Interpreter-space] This refers to code in the implementation of the interpreter (including any IRs for programmer-space constructs).
-\end{description}
 
 All of the expression syntactical analysis functions in the IR must return a CPS function, in the same manner as the nondeterministic interpreter. However, instead of receiving two continuations, it receives a list of continuations. For almost all cases, the procedure is exited by calling the first (default) continuation with the expression value.
 
